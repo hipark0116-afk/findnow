@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>FindNow — 실종자 목격 제보</title>
+  <script type="text/javascript"
+    src="//dapi.kakao.com/v2/maps/sdk.js?appkey=24d8d4c0b41597618f50be50ba5545c2&libraries=services"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    :root {
+      --blue: #1A6EFF;
+      --blue-dark: #1150CC;
+      --red: #FF3B30;
+      --green: #34C759;
+      --bg: #F2F2F7;
+      --card: #FFFFFF;
+      --text: #1C1C1E;
+      --sub: #8E8E93;
+      --border: #E5E5EA;
+      --safe: env(safe-area-inset-bottom, 0px);
+    }
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; }
+
+    /* ── 앱 셸 ── */
+    #app { display: flex; flex-direction: column; height: 100vh; max-width: 430px; margin: 0 auto; background: var(--bg); position: relative; overflow: hidden; }
+
+    /* ── 상단 헤더 ── */
+    .app-header {
+      background: var(--blue); color: white;
+      padding: 52px 20px 16px;
+      flex-shrink: 0;
+    }
+    .app-header h1 { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.5px; }
+    .app-header p { font-size: 0.82rem; opacity: 0.85; margin-top: 2px; }
+
+    /* ── 스크린 전환 ── */
+    .screen { display: none; flex: 1; overflow-y: auto; padding-bottom: calc(64px + var(--safe)); }
+    .screen.active { display: block; }
+
+    /* ── 탭바 ── */
+    .tab-bar {
+      position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+      width: 100%; max-width: 430px;
+      background: rgba(255,255,255,0.95);
+      backdrop-filter: blur(10px);
+      border-top: 1px solid var(--border);
+      display: flex;
+      padding-bottom: var(--safe);
+      z-index: 100;
+    }
+    .tab-btn {
+      flex: 1; padding: 10px 0; border: none; background: none;
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
+      cursor: pointer; color: var(--sub); transition: color 0.15s;
+    }
+    .tab-btn.active { color: var(--blue); }
+    .tab-btn .icon { font-size: 1.4rem; }
+    .tab-btn .label { font-size: 0.68rem; font-weight: 600; }
+
+    /* ── 홈 화면 ── */
+    .search-wrap { padding: 14px 16px 8px; }
+    .search-input {
+      width: 100%; padding: 10px 16px; background: white;
+      border: none; border-radius: 12px; font-size: 0.95rem;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08); outline: none;
+      font-family: inherit;
+    }
+    .alert-banner {
+      margin: 0 16px 10px; padding: 12px 14px;
+      background: #FFF3CD; border-radius: 12px;
+      font-size: 0.82rem; color: #856404; line-height: 1.4;
+    }
+    .missing-list { padding: 0 16px; display: flex; flex-direction: column; gap: 12px; }
+    .missing-card {
+      background: white; border-radius: 16px;
+      padding: 16px; box-shadow: 0 1px 8px rgba(0,0,0,0.07);
+      cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;
+      active: transform: scale(0.98);
+    }
+    .missing-card:active { transform: scale(0.98); }
+    .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+    .card-name { font-size: 1.15rem; font-weight: 800; }
+    .card-badge {
+      padding: 3px 10px; border-radius: 20px;
+      font-size: 0.72rem; font-weight: 700;
+    }
+    .badge-m { background: #E3F0FF; color: var(--blue); }
+    .badge-f { background: #FFE4F0; color: #D0247A; }
+    .card-info { font-size: 0.83rem; color: var(--sub); line-height: 1.6; }
+    .card-info b { color: var(--text); }
+    .card-footer-row {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
+    }
+    .report-count { font-size: 0.8rem; color: var(--sub); }
+    .report-count span { color: var(--blue); font-weight: 700; }
+    .go-btn {
+      font-size: 0.82rem; color: var(--blue); font-weight: 700;
+      background: #E8F0FF; padding: 5px 12px; border-radius: 20px;
+    }
+
+    /* ── 상세/제보 화면 ── */
+    .back-bar {
+      padding: 12px 16px 0; display: flex; align-items: center; gap: 8px;
+    }
+    .back-btn-app {
+      background: none; border: none; cursor: pointer;
+      font-size: 1rem; color: var(--blue); font-weight: 600;
+      padding: 4px 0; font-family: inherit;
+    }
+    .detail-card { margin: 12px 16px 0; background: white; border-radius: 16px; padding: 16px; box-shadow: 0 1px 8px rgba(0,0,0,0.07); }
+    .detail-name { font-size: 1.3rem; font-weight: 800; margin-bottom: 12px; }
+    .detail-row { display: flex; gap: 8px; margin-bottom: 8px; font-size: 0.85rem; }
+    .detail-row .dt { color: var(--sub); min-width: 70px; }
+    .detail-row .dd { color: var(--text); font-weight: 500; flex: 1; }
+
+    /* URL 공유 박스 */
+    .url-box { margin: 12px 16px 0; background: #EAF2FF; border-radius: 16px; padding: 14px 16px; }
+    .url-box-title { font-size: 0.85rem; font-weight: 700; color: var(--blue); margin-bottom: 8px; }
+    .url-row-app { display: flex; gap: 8px; }
+    .url-input-app {
+      flex: 1; padding: 9px 12px; border: 1.5px solid #C5D9FF;
+      border-radius: 10px; font-size: 0.78rem; background: white;
+      color: var(--blue); font-weight: 600; outline: none; font-family: inherit;
+    }
+    .copy-btn-app {
+      padding: 9px 14px; background: var(--blue); color: white;
+      border: none; border-radius: 10px; font-size: 0.82rem;
+      font-weight: 700; cursor: pointer; white-space: nowrap; font-family: inherit;
+    }
+    .copy-done { font-size: 0.78rem; color: var(--green); margin-top: 4px; height: 16px; }
+    .sms-example { margin-top: 10px; background: white; border-radius: 10px; padding: 10px 12px; font-size: 0.78rem; color: #444; line-height: 1.7; }
+    .sms-example b { color: var(--blue); word-break: break-all; }
+
+    /* 지도 */
+    .map-wrap { margin: 12px 16px 0; border-radius: 16px; overflow: hidden; box-shadow: 0 1px 8px rgba(0,0,0,0.07); }
+    #map { width: 100%; height: 260px; }
+    .map-hint { padding: 8px 12px; background: white; font-size: 0.78rem; color: var(--sub); text-align: center; }
+
+    /* 제보 폼 */
+    .form-card { margin: 12px 16px 0; background: white; border-radius: 16px; padding: 16px; box-shadow: 0 1px 8px rgba(0,0,0,0.07); }
+    .form-title { font-size: 1rem; font-weight: 700; margin-bottom: 14px; }
+    .form-label { font-size: 0.8rem; font-weight: 600; color: var(--sub); margin-bottom: 4px; display: block; margin-top: 12px; }
+    .form-label:first-of-type { margin-top: 0; }
+    .form-input, .form-textarea {
+      width: 100%; padding: 10px 12px; border: 1.5px solid var(--border);
+      border-radius: 10px; font-size: 0.88rem; outline: none;
+      transition: border-color 0.2s; font-family: inherit; background: #FAFAFA;
+    }
+    .form-input:focus, .form-textarea:focus { border-color: var(--blue); background: white; }
+    .form-textarea { height: 72px; resize: none; }
+    .loc-selected { background: #F0F7FF; border-color: #90C0FF; color: var(--blue); font-size: 0.82rem; }
+    .submit-btn-app {
+      width: 100%; margin-top: 14px; padding: 14px;
+      background: var(--blue); color: white; border: none;
+      border-radius: 12px; font-size: 1rem; font-weight: 700;
+      cursor: pointer; font-family: inherit; transition: background 0.2s;
+    }
+    .submit-btn-app:active { background: var(--blue-dark); }
+    .form-msg-app { margin-top: 8px; font-size: 0.85rem; text-align: center; }
+    .form-msg-app.ok { color: var(--green); }
+    .form-msg-app.err { color: var(--red); }
+
+    /* AI 분석 */
+    .ai-btn {
+      display: block; width: calc(100% - 32px); margin: 12px 16px 0;
+      padding: 13px; background: #1A8C4A; color: white; border: none;
+      border-radius: 12px; font-size: 0.95rem; font-weight: 700;
+      cursor: pointer; font-family: inherit; transition: background 0.2s;
+    }
+    .ai-btn:active { background: #156b39; }
+    .ai-msg { margin: 6px 16px 0; font-size: 0.83rem; }
+    .ai-msg.ok { color: #1A8C4A; }
+    .ai-msg.err { color: var(--red); }
+    .ai-msg.loading { color: var(--blue); }
+
+    /* 타임라인 */
+    .timeline-card { margin: 12px 16px 0; background: white; border-radius: 16px; padding: 16px; box-shadow: 0 1px 8px rgba(0,0,0,0.07); }
+    .timeline-title { font-size: 0.95rem; font-weight: 700; margin-bottom: 10px; }
+    .tl-item { padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .tl-item:last-child { border-bottom: none; }
+    .tl-time { font-size: 0.75rem; color: var(--blue); font-weight: 600; }
+    .tl-loc { font-size: 0.82rem; color: var(--text); margin-top: 2px; }
+    .tl-memo { font-size: 0.78rem; color: var(--sub); font-style: italic; margin-top: 2px; }
+    .tl-empty { font-size: 0.85rem; color: var(--sub); text-align: center; padding: 16px 0; }
+
+    /* 정보 화면 */
+    .info-section { padding: 16px; }
+    .info-card { background: white; border-radius: 16px; padding: 18px; margin-bottom: 12px; box-shadow: 0 1px 8px rgba(0,0,0,0.07); }
+    .info-card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 8px; }
+    .info-card p { font-size: 0.85rem; color: #444; line-height: 1.6; }
+    .step-row { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 10px; }
+    .step-num { width: 28px; height: 28px; background: var(--blue); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 800; flex-shrink: 0; }
+    .step-text { font-size: 0.85rem; color: #333; line-height: 1.5; padding-top: 4px; }
+
+    /* 지도 범례 */
+    .map-legend-app { display: flex; gap: 12px; padding: 8px 12px; background: #F7F9FC; font-size: 0.75rem; color: var(--sub); flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- 헤더 -->
+  <div class="app-header">
+    <h1>🔍 FindNow</h1>
+    <p>실종자 목격 정보를 제보해 생명을 지켜주세요</p>
+  </div>
+
+  <!-- 홈 화면 -->
+  <div id="screen-home" class="screen active">
+    <div class="search-wrap">
+      <input class="search-input" type="text" placeholder="🔎  이름 또는 지역으로 검색" oninput="filterCards(this.value)">
+    </div>
+    <div class="alert-banner">
+      📱 실종 경보 문자를 받으셨나요? 목격하셨다면 카드를 눌러 바로 제보하세요!
+    </div>
+    <div class="missing-list" id="missingList"></div>
+  </div>
+
+  <!-- 상세/제보 화면 -->
+  <div id="screen-detail" class="screen">
+    <div class="back-bar">
+      <button class="back-btn-app" onclick="showScreen('home')">← 목록</button>
+    </div>
+
+    <div class="detail-card">
+      <div class="detail-name" id="dName"></div>
+      <div class="detail-row"><span class="dt">📍 마지막 목격</span><span class="dd" id="dLocation"></span></div>
+      <div class="detail-row"><span class="dt">👕 외형 특징</span><span class="dd" id="dFeatures"></span></div>
+      <div class="detail-row"><span class="dt">🕐 신고 일시</span><span class="dd" id="dTime"></span></div>
+    </div>
+
+    <!-- 단축 URL 공유 -->
+    <div class="url-box">
+      <div class="url-box-title">📲 제보 링크 — 실종 문자에 포함하세요</div>
+      <div class="url-row-app">
+        <input class="url-input-app" id="shareUrl" readonly>
+        <button class="copy-btn-app" onclick="copyShareUrl()">복사</button>
+      </div>
+      <div class="copy-done" id="copyDone"></div>
+      <div class="sms-example" id="smsExample"></div>
+    </div>
+
+    <!-- 지도 -->
+    <div class="map-wrap">
+      <div id="map"></div>
+      <div class="map-legend-app">
+        <span>🔵 오래된 제보</span>
+        <span>🔴 최신 제보</span>
+        <span>🟠 AI 예상 구역</span>
+      </div>
+      <div class="map-hint">지도를 탭해서 목격 위치를 선택하세요</div>
+    </div>
+
+    <!-- AI 분석 -->
+    <button class="ai-btn" onclick="runPredict()">🤖 AI 위치 분석 실행</button>
+    <div class="ai-msg" id="aiMsg"></div>
+
+    <!-- 제보 폼 -->
+    <div class="form-card">
+      <div class="form-title">📋 목격 제보하기</div>
+      <label class="form-label">목격 일시</label>
+      <input class="form-input" type="datetime-local" id="seenAt">
+      <label class="form-label">목격 위치</label>
+      <input class="form-input loc-selected" id="locationText" placeholder="지도를 탭해서 위치를 선택하세요" readonly>
+      <input type="hidden" id="latInput">
+      <input type="hidden" id="lngInput">
+      <label class="form-label">특징 메모 (선택)</label>
+      <textarea class="form-textarea" id="memoInput" placeholder="의상 색상, 이동 방향 등 기억나는 내용을 입력하세요"></textarea>
+      <button class="submit-btn-app" onclick="submitReport()">제보 제출하기</button>
+      <div class="form-msg-app" id="formMsg"></div>
+    </div>
+
+    <!-- 타임라인 -->
+    <div class="timeline-card">
+      <div class="timeline-title">📌 제보 현황</div>
+      <div id="timelineList"></div>
+    </div>
+    <div style="height:16px;"></div>
+  </div>
+
+  <!-- 정보 화면 -->
+  <div id="screen-info" class="screen">
+    <div class="info-section">
+      <div class="info-card">
+        <h3>🔍 FindNow란?</h3>
+        <p>실종 경보 문자를 받은 시민이 단축 URL 하나로 즉시 목격 정보를 제보할 수 있는 플랫폼입니다. 112 전화 없이 3단계로 제보가 완료됩니다.</p>
+      </div>
+      <div class="info-card">
+        <h3>📱 제보 방법</h3>
+        <div class="step-row"><div class="step-num">1</div><div class="step-text">실종 경보 문자 속 링크 탭</div></div>
+        <div class="step-row"><div class="step-num">2</div><div class="step-text">지도를 탭해서 목격 위치 선택</div></div>
+        <div class="step-row"><div class="step-num">3</div><div class="step-text">시간·특징 입력 후 제보 제출</div></div>
+      </div>
+      <div class="info-card">
+        <h3>🔒 개인정보 보호</h3>
+        <p>제보자의 개인정보는 일절 수집하지 않습니다. 완전한 익명으로 제보가 가능합니다.</p>
+      </div>
+      <div class="info-card">
+        <h3>🤖 AI 분석이란?</h3>
+        <p>3건 이상의 제보가 쌓이면 AI(K-Means 군집화)가 제보 위치를 분석해 실종자가 있을 가능성이 높은 구역을 1~3순위로 지도에 표시합니다.</p>
+      </div>
+      <div class="info-card">
+        <h3>📞 긴급 연락</h3>
+        <p>실종자를 직접 발견하셨다면 즉시 <b>112</b>에 신고해 주세요.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 탭바 -->
+  <div class="tab-bar">
+    <button class="tab-btn active" id="tab-home" onclick="showScreen('home')">
+      <span class="icon">🏠</span><span class="label">홈</span>
+    </button>
+    <button class="tab-btn" id="tab-info" onclick="showScreen('info')">
+      <span class="icon">ℹ️</span><span class="label">이용안내</span>
+    </button>
+  </div>
+</div>
+
+<script>
+// ── 샘플 데이터 (Flask 연동 전 테스트용) ──────────────
+const MISSING_DATA = [
+  {
+    id: 1, name: "홍길동", age: 72, gender: "남성",
+    features: "회색 점퍼, 검정 바지, 흰머리, 키 약 165cm",
+    last_location: "서울 노원구 상계동 주민센터 앞",
+    reported_at: "2026-06-11 09:00",
+    sightings: []
+  },
+  {
+    id: 2, name: "김영희", age: 8, gender: "여성",
+    features: "분홍 원피스, 노란 가방, 단발머리",
+    last_location: "경기 수원시 팔달구 화서동 놀이터",
+    reported_at: "2026-06-11 14:30",
+    sightings: []
+  }
+];
+
+let currentPerson = null;
+let map = null, clickMarker = null;
+let sightingMarkers = [], predictCircles = [];
+
+// ── 화면 전환 ──────────────────────────────────────
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('screen-' + name).classList.add('active');
+  const tab = document.getElementById('tab-' + name);
+  if (tab) tab.classList.add('active');
+  if (name === 'home') renderCards(MISSING_DATA);
+}
+
+// ── 카드 렌더링 ────────────────────────────────────
+function renderCards(data) {
+  const list = document.getElementById('missingList');
+  list.innerHTML = '';
+  if (data.length === 0) {
+    list.innerHTML = '<p style="text-align:center;color:#888;padding:32px;">검색 결과가 없습니다.</p>';
+    return;
+  }
+  data.forEach(p => {
+    const el = document.createElement('div');
+    el.className = 'missing-card';
+    el.innerHTML = `
+      <div class="card-top">
+        <div class="card-name">${p.name}</div>
+        <span class="card-badge ${p.gender==='여성'?'badge-f':'badge-m'}">${p.gender} · ${p.age}세</span>
+      </div>
+      <div class="card-info">
+        <div>📍 <b>${p.last_location}</b></div>
+        <div>👕 ${p.features}</div>
+        <div>🕐 ${p.reported_at}</div>
+      </div>
+      <div class="card-footer-row">
+        <div class="report-count">제보 <span>${p.sightings.length}건</span></div>
+        <div class="go-btn">제보하기 →</div>
+      </div>`;
+    el.onclick = () => openDetail(p);
+    list.appendChild(el);
+  });
+}
+
+// ── 검색 필터 ──────────────────────────────────────
+function filterCards(q) {
+  const filtered = MISSING_DATA.filter(p =>
+    p.name.includes(q) || p.last_location.includes(q)
+  );
+  renderCards(filtered);
+}
+
+// ── 상세 화면 열기 ─────────────────────────────────
+function openDetail(person) {
+  currentPerson = person;
+  document.getElementById('dName').textContent = person.name + ' · ' + person.age + '세 / ' + person.gender;
+  document.getElementById('dLocation').textContent = person.last_location;
+  document.getElementById('dFeatures').textContent = person.features;
+  document.getElementById('dTime').textContent = person.reported_at;
+
+  const url = window.location.origin + '/missing/' + person.id;
+  document.getElementById('shareUrl').value = url;
+  document.getElementById('smsExample').innerHTML =
+    `[안전안내문자] 실종자 발생.<br>${person.name}(${person.age}세/${person.gender}) ${person.features}.<br>목격 제보(익명) → <b>${url}</b>`;
+
+  document.getElementById('formMsg').textContent = '';
+  document.getElementById('aiMsg').textContent = '';
+  document.getElementById('seenAt').value = '';
+  document.getElementById('locationText').value = '';
+  document.getElementById('latInput').value = '';
+  document.getElementById('lngInput').value = '';
+  document.getElementById('memoInput').value = '';
+
+  showScreen('detail');
+  setTimeout(initMap, 100);
+  renderTimeline();
+}
+
+// ── 지도 초기화 ────────────────────────────────────
+function initMap() {
+  if (!window.kakao || !window.kakao.maps) {
+    document.querySelector('.map-hint').textContent = '⚠️ 카카오맵 API 키를 설정해주세요.';
+    return;
+  }
+  const container = document.getElementById('map');
+  map = new kakao.maps.Map(container, {
+    center: new kakao.maps.LatLng(37.5665, 126.9780), level: 7
+  });
+  kakao.maps.event.addListener(map, 'click', function(e) {
+    const lat = e.latLng.getLat(), lng = e.latLng.getLng();
+    document.getElementById('latInput').value = lat;
+    document.getElementById('lngInput').value = lng;
+    const geo = new kakao.maps.services.Geocoder();
+    geo.coord2Address(lng, lat, function(r, s) {
+      if (s === kakao.maps.services.Status.OK) {
+        const addr = r[0].road_address
+          ? r[0].road_address.address_name
+          : r[0].address.address_name;
+        document.getElementById('locationText').value = addr;
+      } else {
+        document.getElementById('locationText').value = `위도 ${lat.toFixed(5)}, 경도 ${lng.toFixed(5)}`;
+      }
+    });
+    if (clickMarker) clickMarker.setMap(null);
+    clickMarker = new kakao.maps.Marker({ position: e.latLng, map });
+  });
+  renderMapMarkers();
+}
+
+// ── 마커 렌더링 ────────────────────────────────────
+function renderMapMarkers() {
+  if (!map || !currentPerson) return;
+  sightingMarkers.forEach(m => m.setMap(null));
+  sightingMarkers = [];
+  const data = currentPerson.sightings;
+  const n = data.length;
+  data.forEach((s, i) => {
+    const t = n > 1 ? i/(n-1) : 1;
+    const pos = new kakao.maps.LatLng(s.lat, s.lng);
+    const marker = new kakao.maps.Marker({
+      position: pos, map,
+      image: makeMarkerImage(interpolateColor(t))
+    });
+    const iw = new kakao.maps.InfoWindow({
+      content: `<div style="padding:8px;font-size:12px;max-width:180px;"><b>${s.seen_at}</b><br>${s.memo||'메모 없음'}</div>`
+    });
+    kakao.maps.event.addListener(marker, 'click', () => iw.open(map, marker));
+    sightingMarkers.push(marker);
+  });
+  if (n > 0) map.setCenter(new kakao.maps.LatLng(data[n-1].lat, data[n-1].lng));
+}
+
+function makeMarkerImage(color) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="35" viewBox="0 0 24 35">
+    <path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 23 12 23S24 21 24 12C24 5.4 18.6 0 12 0z"
+      fill="${color}" stroke="white" stroke-width="2"/>
+    <circle cx="12" cy="12" r="5" fill="white"/>
+  </svg>`;
+  return new kakao.maps.MarkerImage(
+    'data:image/svg+xml;charset=UTF-8,'+encodeURIComponent(svg),
+    new kakao.maps.Size(24,35)
+  );
+}
+
+function interpolateColor(t) {
+  return `rgb(${Math.round(30+t*225)},${Math.round(120-t*120)},${Math.round(210-t*210)})`;
+}
+
+// ── URL 복사 ───────────────────────────────────────
+function copyShareUrl() {
+  navigator.clipboard.writeText(document.getElementById('shareUrl').value).then(() => {
+    const el = document.getElementById('copyDone');
+    el.textContent = '✅ 복사됐어요!';
+    setTimeout(() => el.textContent = '', 2000);
+  });
+}
+
+// ── 제보 제출 ──────────────────────────────────────
+function submitReport() {
+  const seenAt = document.getElementById('seenAt').value;
+  const lat = parseFloat(document.getElementById('latInput').value);
+  const lng = parseFloat(document.getElementById('lngInput').value);
+  const memo = document.getElementById('memoInput').value;
+  const msg = document.getElementById('formMsg');
+
+  if (!seenAt || !lat || !lng) {
+    msg.textContent = '⚠️ 목격 일시와 위치를 모두 입력해주세요.';
+    msg.className = 'form-msg-app err'; return;
+  }
+  const newSighting = { lat, lng, seen_at: seenAt, memo };
+  currentPerson.sightings.push(newSighting);
+
+  msg.textContent = '✅ 제보가 접수되었습니다. 감사합니다!';
+  msg.className = 'form-msg-app ok';
+  document.getElementById('seenAt').value = '';
+  document.getElementById('locationText').value = '';
+  document.getElementById('latInput').value = '';
+  document.getElementById('lngInput').value = '';
+  document.getElementById('memoInput').value = '';
+  if (clickMarker) { clickMarker.setMap(null); clickMarker = null; }
+  renderMapMarkers();
+  renderTimeline();
+
+  // 카드 제보 수 업데이트
+  renderCards(MISSING_DATA);
+}
+
+// ── 타임라인 렌더링 ────────────────────────────────
+function renderTimeline() {
+  const el = document.getElementById('timelineList');
+  const data = currentPerson ? currentPerson.sightings : [];
+  if (data.length === 0) {
+    el.innerHTML = '<div class="tl-empty">아직 제보가 없습니다.<br>첫 번째 제보자가 되어주세요!</div>';
+    return;
+  }
+  el.innerHTML = [...data].reverse().map(s => `
+    <div class="tl-item">
+      <div class="tl-time">${s.seen_at}</div>
+      <div class="tl-loc">위도 ${s.lat.toFixed(4)}, 경도 ${s.lng.toFixed(4)}</div>
+      ${s.memo ? `<div class="tl-memo">${s.memo}</div>` : ''}
+    </div>`).join('');
+}
+
+// ── AI 예측 (K-Means 간이 구현) ────────────────────
+function runPredict() {
+  const msg = document.getElementById('aiMsg');
+  const data = currentPerson ? currentPerson.sightings : [];
+  if (data.length < 3) {
+    msg.textContent = `⚠️ 제보가 3건 이상 필요합니다. (현재 ${data.length}건)`;
+    msg.className = 'ai-msg err'; return;
+  }
+  msg.textContent = '🤖 AI 분석 중...'; msg.className = 'ai-msg loading';
+  predictCircles.forEach(c => { if(c.setMap) c.setMap(null); });
+  predictCircles = [];
+
+  setTimeout(() => {
+    const centers = kMeans(data.map(s => [s.lat, s.lng]), Math.min(3, data.length));
+    const colors = ['#FF4444','#FF8C00','#FFD700'];
+    const labels = ['1순위','2순위','3순위'];
+    centers.forEach((center, i) => {
+      const pos = new kakao.maps.LatLng(center[0], center[1]);
+      const circle = new kakao.maps.Circle({
+        map, center: pos, radius: 300,
+        strokeWeight: 2, strokeColor: colors[i], strokeOpacity: 0.8,
+        fillColor: colors[i], fillOpacity: 0.25
+      });
+      const overlay = new kakao.maps.CustomOverlay({
+        position: pos,
+        content: `<div style="background:${colors[i]};color:white;padding:4px 8px;border-radius:12px;font-size:11px;font-weight:bold;">${labels[i]} 예상구역</div>`
+      });
+      overlay.setMap(map);
+      predictCircles.push(circle, overlay);
+    });
+    msg.textContent = `✅ AI 분석 완료! ${centers.length}개 예상 구역을 지도에 표시했습니다.`;
+    msg.className = 'ai-msg ok';
+  }, 600);
+}
+
+// ── K-Means 간이 구현 ──────────────────────────────
+function kMeans(points, k) {
+  let centers = points.slice(-k).map(p => [...p]);
+  for (let iter = 0; iter < 20; iter++) {
+    const clusters = Array.from({length:k}, () => []);
+    points.forEach(p => {
+      let best = 0, bestDist = Infinity;
+      centers.forEach((c,i) => {
+        const d = (p[0]-c[0])**2 + (p[1]-c[1])**2;
+        if (d < bestDist) { bestDist = d; best = i; }
+      });
+      clusters[best].push(p);
+    });
+    centers = clusters.map((cl, i) => {
+      if (cl.length === 0) return centers[i];
+      return [
+        cl.reduce((s,p)=>s+p[0],0)/cl.length,
+        cl.reduce((s,p)=>s+p[1],0)/cl.length
+      ];
+    });
+  }
+  // 최신 포인트와 가까운 순 정렬
+  const latest = points[points.length-1];
+  return centers.sort((a,b) =>
+    ((a[0]-latest[0])**2+(a[1]-latest[1])**2) -
+    ((b[0]-latest[0])**2+(b[1]-latest[1])**2)
+  );
+}
+
+// ── 초기 실행 ──────────────────────────────────────
+renderCards(MISSING_DATA);
+</script>
+</body>
+</html>
