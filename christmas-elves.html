@@ -116,11 +116,17 @@
   .dot.on { background: #fff3c4; border: 1.5px solid var(--ink); box-shadow: 0 0 6px 3px rgba(255, 190, 80, 0.9); }
   .modeRow { display: flex; gap: 6px; margin-top: 10px; }
   .modeBtn {
-    flex: 1; padding: 4px; font: inherit; font-size: 17px; cursor: pointer;
+    flex: 1; padding: 4px 2px; font: inherit; font-size: 15px; cursor: pointer; white-space: nowrap;
     background: var(--cream); color: var(--ink); border: 2px solid var(--ink-soft);
     border-radius: 11px 8px 12px 7px / 7px 12px 8px 11px;
   }
   .modeBtn.on { border-color: var(--green-dark); background: #dfe8cf; }
+  .netPanel { margin-top: 8px; padding: 8px 10px; border: 2px dashed var(--ink-soft); border-radius: 10px; background: rgba(255,250,240,0.6); font-size: 17px; }
+  .netPanel b#roomCode { font-family: 'Nanum Pen Script', cursive; font-weight: 400; font-size: 34px; color: var(--red); letter-spacing: 3px; vertical-align: middle; }
+  .netPanel .small { font-size: 15px; color: var(--ink-soft); margin-top: 2px; }
+  #codeInput { width: 140px; padding: 2px 8px; font: inherit; font-size: 22px; letter-spacing: 3px; text-transform: uppercase; border: 2px solid var(--ink); border-radius: 8px; background: var(--cream); color: var(--ink); outline: none; }
+  .miniBtn { font: inherit; font-size: 16px; padding: 1px 10px; cursor: pointer; color: var(--cream); background: var(--green); border: 2px solid var(--ink); border-radius: 8px; box-shadow: 2px 2px 0 var(--ink); }
+  #startBtn:disabled { background: #9a8a78; cursor: default; }
   .modeBtn:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn, #startBtn {
     font-family: 'Nanum Pen Script', cursive; font-weight: 400; cursor: pointer; color: var(--cream);
@@ -130,8 +136,9 @@
   }
   .btn:hover, #startBtn:hover { background: #c4473a; }
   .btn:active, #startBtn:active { transform: translate(2px, 3px); box-shadow: 1px 1px 0 var(--ink); }
-  .lobbyFoot { flex: none; padding: 8px 16px 10px; border-top: 2px dashed var(--ink-soft); }
-  #startBtn { width: 100%; padding: 0; font-size: 36px; }
+  .lobbyFoot { flex: none; padding: 2px 16px 10px; border-top: 2px dashed var(--ink-soft); }
+  .lobbyFoot .modeRow { margin-top: 6px; }
+  #startBtn { width: 100%; margin-top: 8px; padding: 0; font-size: 32px; white-space: nowrap; }
   #best { margin-top: 4px; text-align: center; color: var(--ink-soft); font-size: 17px; }
 
   /* ===== 하단 스토리 박스 ===== */
@@ -231,12 +238,19 @@
     <div class="label">📡 접속 인원 <b id="playerCount">1</b> / 21</div>
     <div id="slotDots"></div>
 
-    <div class="modeRow">
-      <button class="modeBtn on">🧝 혼자 하기</button>
-      <button class="modeBtn" disabled title="다음 업데이트에서 추가돼요">👥 친구와 (준비 중)</button>
-    </div>
   </div>
   <div class="lobbyFoot">
+    <div class="modeRow">
+      <button class="modeBtn on" id="modeSolo">🧝 혼자</button>
+      <button class="modeBtn" id="modeHost">🏠 방 만들기</button>
+      <button class="modeBtn" id="modeJoin">🔑 참가하기</button>
+    </div>
+    <div id="netPanel" class="netPanel" style="display:none">
+      <div id="hostInfo">방 코드 <b id="roomCode">-----</b> <button id="copyCode" class="miniBtn">복사</button>
+        <div class="small">친구들은 [참가하기]에 이 코드를 넣으면 돼요. 방장은 게임 창을 닫지 마세요!</div></div>
+      <div id="joinInfo"><input id="codeInput" maxlength="5" placeholder="코드 5자리" autocomplete="off"> <button id="joinBtn" class="miniBtn">들어가기</button></div>
+      <div id="netStatus" class="small"></div>
+    </div>
     <button id="startBtn">게임 시작 ▶</button>
     <div id="best"></div>
   </div>
@@ -701,9 +715,12 @@ function onKeyPress(code) {
   if (code === 'KeyN') { setSfx(!Snd.sfxOn); return; }
   if (state === 'ending' && code === 'Escape') { skipEnding(); return; }
   if (state !== 'play') return;
-  if (code === 'Escape' || code === 'KeyP') { setPaused(!paused); return; }
+  if (code === 'Escape' || code === 'KeyP') {
+    if (Net.mode !== 'solo') { toast('👥 친구들과 함께할 땐 멈출 수 없어요', '#9fd3ff'); return; }
+    setPaused(!paused); return;
+  }
   if (paused || !local || local.dead) return;
-  if (SKILL_KEYS[code]) useSkill(local, SKILL_KEYS[code]);
+  if (SKILL_KEYS[code]) { if (Net.mode === 'client') clientSkill(SKILL_KEYS[code]); else useSkill(local, SKILL_KEYS[code]); }
   if (code === 'KeyT') { autoAim = !autoAim; toast(autoAim ? '🎯 자동 조준 켜짐 (T)' : '🖱 마우스 조준 (T)', '#9fd3ff'); }
   if (code.startsWith('Digit')) {
     const n = +code.slice(5) - 1;
@@ -868,11 +885,13 @@ const BIOME_LINES = {
 
 function updatePlayer(p, dt) {
   if (p.dead) {
+    if (Net.mode === 'client') return;                   // 부활은 방장이 정해요
     p.respawnT -= dt;
     if (p.respawnT <= 0) {
       p.dead = false; p.hp = p.maxHp; p.x = p.spawnX; p.y = p.spawnY; p.invuln = 2.5; p.vx = p.vy = 0;
+      p.tpSeq = (p.tpSeq || 0) + 1;
       burst(p.x, p.y, '#fff3a0', 30, 220);
-      toast('✨ 시작 지점에서 다시 일어났어요!', '#fff3a0');
+      notify(p, 'T', '✨ 시작 지점에서 다시 일어났어요!', '#fff3a0');
     }
     return;
   }
@@ -882,6 +901,7 @@ function updatePlayer(p, dt) {
   p.burnCd = Math.max(0, p.burnCd - dt);
   if (p.regen) p.hp = Math.min(p.maxHp, p.hp + p.regen * dt);
   if (p.regenBoost > 0) { p.regenBoost -= dt; p.hp = Math.min(p.maxHp, p.hp + p.maxHp * 0.045 * dt); }
+  if (p.remote) { updateRemotePlayer(p, dt); return; }   // 친구 엘프: 위치는 친구 컴퓨터에서 와요
 
   // 이동 (로컬 플레이어는 키보드 입력)
   let ix = 0, iy = 0;
@@ -944,7 +964,8 @@ function updatePlayer(p, dt) {
   }
   p.face = Math.cos(p.aim) >= 0 ? 1 : -1;
   p.fireCd -= dt;
-  if (firing && p.fireCd <= 0 && state === 'play') fireWeapon(p);
+  if (Net.mode === 'client') p.wantFire = firing && state === 'play';
+  else if (firing && p.fireCd <= 0 && state === 'play') fireWeapon(p);
 
   // 지역 / 위험 구역 진입 안내
   if (p === local) {
@@ -964,6 +985,21 @@ function updatePlayer(p, dt) {
       if (z === 4) say('holly', '「' + ZONE_NAME[3] + '」… 트리 바로 앞이구나. 여기 어둠들은 정말 강하단다. 힘내렴!');
     }
   }
+}
+
+function updateRemotePlayer(p, dt) {
+  const n = p.net;
+  if (n) {
+    if ((n.tp || 0) === (p.tpSeq || 0)) { p.x = clamp(+n.x || p.x, 40, W - 40); p.y = clamp(+n.y || p.y, 40, H - 40); }
+    p.aim = +n.aim || 0; p.ix = +n.ix || 0; p.iy = +n.iy || 0; p.moving = !!n.mv; p.walk = +n.wk || 0;
+    if (n.w >= 0 && n.w < p.weapons.length) p.wIdx = n.w | 0;
+  }
+  p.face = Math.cos(p.aim) >= 0 ? 1 : -1;
+  if (p.dashT > 0) p.dashT -= dt;
+  const ter = terrainAt(p.x, p.y);
+  if (ter.burn && p.burnCd <= 0) { p.burnCd = 0.5; hurtPlayer(p, 7); burst(p.x, p.y + 10, '#ff7b3c', 6, 90); }
+  p.fireCd -= dt;
+  if (n && n.fire && p.fireCd <= 0 && state === 'play') fireWeapon(p);
 }
 
 function fireWeapon(p) {
@@ -987,6 +1023,7 @@ function fireWeapon(p) {
 
 function useSkill(p, s) {
   if (!p.skills[s]) {
+    if (p !== local) return;
     const from = SUBS.find(d => d.skill === s);
     toast('🔒 ' + SKILLS[s].name + ' — ' + (from ? from.dir + '의 중간 보스 「' + from.name + '」를 쓰러뜨리면 배워요!' : '별조각 ' + CHAIN_REWARD + '개를 모으면 홀리가 가르쳐 줘요!'), '#c9b6ff');
     return;
@@ -996,7 +1033,7 @@ function useSkill(p, s) {
     let dx = p.ix, dy = p.iy;
     if (!dx && !dy) { dx = Math.cos(p.aim); dy = Math.sin(p.aim); }
     p.dvx = dx * 900; p.dvy = dy * 900; p.dashT = 0.18; p.invuln = Math.max(p.invuln, 0.25);
-    sfx('dash');
+    sfx('dash', p.x, p.y);
     for (let i = 1; i <= 4; i++) later(i * 0.035, () => particles.push({ kind: 'ghost', x: p.x, y: p.y, vx: 0, vy: 0, life: 0.3, max: 0.3, look: p.look, face: p.face, walk: p.walk }));
     p.cd.dash = SKILLS.dash.cd * p.dashCdMul;
     if (p === local && tut.step === 3) tut.dashed++;
@@ -1010,7 +1047,7 @@ function useSkill(p, s) {
     }
     hazards.push({ x: p.x, y: p.y, r: R, t: 0, delay: 0, dmg: 0, team: 'ring', color: '#bff0ff' });
     shock(p.x, p.y, '#ffffff', R, 0.4, 10); shock(p.x, p.y, '#9be7ff', R * 1.3, 0.6, 5); glowPuff(p.x, p.y, '#9be7ff', 140, 0.3);
-    sparkle(p.x, p.y, '#d4f2ff', 18, 420, 0.7); sfx('nova'); flashScreen('#e3f6ff', 0.2);
+    sparkle(p.x, p.y, '#d4f2ff', 18, 420, 0.7); sfx('nova', p.x, p.y); flashScreen('#e3f6ff', 0.2, p.x, p.y);
     for (const e of enemies) {
       if (e.dead || e.burrowed) continue;
       const d = dist(p.x, p.y, e.x, e.y);
@@ -1025,19 +1062,20 @@ function useSkill(p, s) {
   if (s === 'turret') {
     p.cd.turret = SKILLS.turret.cd;
     turrets.push({ x: p.x + Math.cos(p.aim) * 30, y: p.y + Math.sin(p.aim) * 30, t: 9, cd: 0, owner: p, aim: 0 });
-    confetti(p.x + Math.cos(p.aim) * 30, p.y + Math.sin(p.aim) * 30, 20); sfx('gift');
+    confetti(p.x + Math.cos(p.aim) * 30, p.y + Math.sin(p.aim) * 30, 20); sfx('gift', p.x, p.y);
   }
   if (s === 'meteor') {
     p.cd.meteor = SKILLS.meteor.cd;
     let tx = mouse.x + cam.x, ty = mouse.y + cam.y;
-    if (autoAim || p !== local) { const t = nearestEnemy(p.x, p.y, 600); if (t) { tx = t.x; ty = t.y; } else { tx = p.x + Math.cos(p.aim) * 250; ty = p.y + Math.sin(p.aim) * 250; } }
+    if (p !== local && p.netTarget) { tx = p.netTarget.x; ty = p.netTarget.y; }
+    else if (autoAim || p !== local) { const t = nearestEnemy(p.x, p.y, 600); if (t) { tx = t.x; ty = t.y; } else { tx = p.x + Math.cos(p.aim) * 250; ty = p.y + Math.sin(p.aim) * 250; } }
     const d = dist(p.x, p.y, tx, ty);
     if (d > 600) { tx = p.x + (tx - p.x) / d * 600; ty = p.y + (ty - p.y) / d * 600; }
     for (let i = 0; i < 9; i++) {
       const a = Math.random() * Math.PI * 2, rr2 = i === 0 ? 0 : rand(30, 150);
       hazards.push({ x: tx + Math.cos(a) * rr2, y: ty + Math.sin(a) * rr2, r: 85, t: 0, delay: 0.4 + i * 0.09, dmg: 55 * p.dmgMul, team: 'player', color: '#ffe066', owner: p });
     }
-    sfx('meteor');
+    sfx('meteor', p.x, p.y);
   }
   if (s === 'chain') {
     // 번개 사슬: 가장 가까운 적부터 최대 7마리까지 튕겨 나감
@@ -1059,14 +1097,14 @@ function useSkill(p, s) {
       burst(fx, fy, '#bfe9ff', 8, 160);
       dmg *= 0.9;
     }
-    if (pts.length < 2) { toast('⚡ 근처에 적이 없어요', '#9fd3ff'); return; }
+    if (pts.length < 2) { notify(p, 'T', '⚡ 근처에 적이 없어요', '#9fd3ff'); return; }
     p.cd.chain = SKILLS.chain.cd;
-    zaps.push({ pts, t: 0 });
-    shake = Math.max(shake, 4); sfx('zap'); flashScreen('#d4f0ff', 0.18);
+    zaps.push({ pts, t: 0 }); rec(['z', Math.round(p.x), Math.round(p.y), pts.map(q => [Math.round(q[0]), Math.round(q[1])])]);
+    shake = Math.max(shake, 4); sfx('zap', p.x, p.y); flashScreen('#d4f0ff', 0.18, p.x, p.y);
   }
   if (s === 'tornado') {
     p.cd.tornado = SKILLS.tornado.cd;
-    sfx('tornado');
+    sfx('tornado', p.x, p.y);
     allies.push({ type: 'tornado', x: p.x + Math.cos(p.aim) * 40, y: p.y + Math.sin(p.aim) * 40, vx: Math.cos(p.aim) * 190, vy: Math.sin(p.aim) * 190, t: 4.5, tick: 0, r: 95, owner: p });
   }
   if (s === 'heal') {
@@ -1075,31 +1113,32 @@ function useSkill(p, s) {
       if (dist(q.x, q.y, p.x, p.y) > 320) continue;
       const h = q.maxHp * 0.35;
       q.hp = Math.min(q.maxHp, q.hp + h); q.regenBoost = 4; q.invuln = Math.max(q.invuln, 1.2); q.slowT = 0;
-      floats.push({ x: q.x, y: q.y - 40, text: '+' + Math.round(h) + ' 💖', color: '#7dffa8', t: 0, life: 1.1, size: 20 });
+      addFloat({ x: q.x, y: q.y - 40, text: '+' + Math.round(h) + ' 💖', color: '#7dffa8', t: 0, life: 1.1, size: 20 });
     }
     hazards.push({ x: p.x, y: p.y, r: 320, t: 0, delay: 0, dmg: 0, team: 'ring', color: '#ffd166' });
     burst(p.x, p.y, '#ffd166', 30, 260); burst(p.x, p.y, '#7dffa8', 20, 200);
-    for (let i = 0; i < 24; i++) particles.push({ kind: 'glow', x: p.x + rand(-60, 60), y: p.y + rand(-10, 30), vx: rand(-20, 20), vy: rand(-180, -80), g: 30, life: rand(0.7, 1.2), max: 1.2, color: pick(['#7dffa8', '#ffd166', '#ff9ecd']), size: rand(4, 8) });
-    shock(p.x, p.y, '#7dffa8', 320, 0.6, 6); sfx('heal');
+    pillar(p.x, p.y, ['#7dffa8', '#ffd166', '#ff9ecd'], 24, 60, -180, -80);
+    shock(p.x, p.y, '#7dffa8', 320, 0.6, 6); sfx('heal', p.x, p.y);
   }
   if (s === 'rudolph') {
     p.cd.rudolph = SKILLS.rudolph.cd;
     const a = p.aim;
     allies.push({ type: 'rudolph', x: p.x - Math.cos(a) * 90, y: p.y - Math.sin(a) * 90, a, t: 1.25, hit: new Set(), dmg: 90 * p.dmgMul, owner: p, walk: 0 });
-    burst(p.x, p.y, '#ff3b3b', 14, 180); sfx('rudolph');
+    burst(p.x, p.y, '#ff3b3b', 14, 180); sfx('rudolph', p.x, p.y);
   }
 }
 
 function hurtPlayer(p, dmg) {
+  if (Net.mode === 'client') return;
   if (p.dead || p.invuln > 0 || p.dashT > 0 || state !== 'play') return;
   p.hp -= dmg; p.invuln = 0.35;
-  floats.push({ x: p.x, y: p.y - 30, text: '-' + Math.round(dmg), color: '#ff5a67', t: 0, life: 0.8, size: 18 });
-  sfx('hurt'); burst(p.x, p.y - 6, '#ff5a67', 8, 160);
-  if (p === local) { shake = Math.max(shake, 7); hurtVignette = 0.5; }
+  addFloat({ x: p.x, y: p.y - 30, text: '-' + Math.round(dmg), color: '#ff5a67', t: 0, life: 0.8, size: 18 });
+  sfx('hurt', p.x, p.y); burst(p.x, p.y - 6, '#ff5a67', 8, 160);
+  if (p === local) { shake = Math.max(shake, 7); hurtVignette = 0.5; } else notify(p, 'V');
   if (p.hp <= 0) {
     p.hp = 0; p.dead = true; p.respawnT = 4; p.deaths++; p.dashT = 0;
     burst(p.x, p.y, p.look.coat, 40, 260);
-    if (p === local) say('holly', p.name + '! 괜찮니?! 걱정 마, 별빛이 너를 시작 지점으로 데려다 줄 거야. 다시 힘내자!');
+    notify(p, 'S', 'holly', p.name + '! 괜찮니?! 걱정 마, 별빛이 너를 시작 지점으로 데려다 줄 거야. 다시 힘내자!');
   }
 }
 
@@ -1108,13 +1147,13 @@ function gainXp(p, n) {
   while (p.xp >= p.xpNext) {
     p.xp -= p.xpNext; p.level++; p.xpNext = Math.round(12 + p.level * 9);
     p.maxHp += 8; p.dmgMul += 0.07; p.hp = Math.min(p.maxHp, p.hp + p.maxHp * 0.3);
-    floats.push({ x: p.x, y: p.y - 50, text: 'LEVEL UP! Lv.' + p.level, color: '#ffd166', t: 0, life: 1.4, size: 24 });
+    addFloat({ x: p.x, y: p.y - 50, text: 'LEVEL UP! Lv.' + p.level, color: '#ffd166', t: 0, life: 1.4, size: 24 });
     burst(p.x, p.y, '#ffd166', 24, 200);
     shock(p.x, p.y, '#ffd166', 160, 0.6, 6); shock(p.x, p.y, '#ffffff', 90, 0.4, 4);
-    for (let i = 0; i < 26; i++) particles.push({ kind: 'glow', x: p.x + rand(-26, 26), y: p.y + rand(-10, 20), vx: rand(-15, 15), vy: rand(-320, -140), g: 60, life: rand(0.6, 1.1), max: 1.1, color: pick(['#ffd166', '#fff3a0', '#ffffff']), size: rand(3, 7) });
+    pillar(p.x, p.y, ['#ffd166', '#fff3a0', '#ffffff'], 26, 26, -320, -140);
     sparkle(p.x, p.y - 20, '#ffd166', 12, 180);
-    sfx('levelup'); if (p === local) flashScreen('#fff3c4', 0.25);
-    if (p === local) toast('⬆ 레벨 ' + p.level + '! 공격력과 체력이 올랐어요', '#ffd166');
+    sfx('levelup', p.x, p.y); if (p === local) flashScreen('#fff3c4', 0.25);
+    notify(p, 'T', '⬆ 레벨 ' + p.level + '! 공격력과 체력이 올랐어요', '#ffd166');
   }
 }
 
@@ -1127,7 +1166,7 @@ function makeEnemy(type, x, y, zone, kind = 'mob') {
   const e = {
     kind, type, name: d.name, x, y, r: d.r, hp: d.hp * ZONE_HP[zone - 1], spd: d.spd * (1 + 0.06 * (zone - 1)),
     dmg: d.dmg * ZONE_DMG[zone - 1], color: d.color, eye: d.eye, xp: d.xp * zone, zone,
-    seed: Math.random() * 10, hitCd: 0, flash: 0, slowT: 0, atk: rand(0.8, 2.2), blinkT: rand(2, 4), alpha: 1,
+    seed: Math.random() * 10, hitCd: 0, flash: 0, slowT: 0, atk: rand(0.8, 2.2), blinkT: rand(2, 4), alpha: 1, uid: ++uidSeq,
   };
   if (kind === 'elite') { e.hp *= 8; e.r *= 1.8; e.dmg *= 1.4; e.spd *= 0.85; e.xp *= 6; e.name = '정예 ' + d.name; }
   e.maxHp = e.hp;
@@ -1138,7 +1177,7 @@ function makeBoss(def) {
     kind: 'boss', type: def.id, id: def.id, name: def.name, who: def.who, x: def.x, y: def.y, homeX: def.x, homeY: def.y,
     r: def.r, hp: def.hp, maxHp: def.hp, dmg: def.dmg, awake: false, dead: false, t: 0, st: 1.2, z: 0,
     mode: 0, mt: 0, sub: 0, hops: 0, ang: 0, oa: 0, sa: 0, phase: 1, seed: Math.random() * 10,
-    flash: 0, slowT: 0, hitCd: 0, face: 1, state: 'idle', enr: false, intro: false, atk: 1,
+    flash: 0, slowT: 0, hitCd: 0, face: 1, state: 'idle', enr: false, intro: false, atk: 1, uid: ++uidSeq,
   };
 }
 function ebullet(x, y, a, spd, dmg, r = 7, color = '#b04cff', extra) {
@@ -1163,7 +1202,7 @@ function damageEnemy(e, dmg, src) {
   e.hp -= dmg; e.flash = 0.08;
   if (e.kind === 'boss' && !e.awake) wakeBoss(e);
   const big = dmg >= 40;
-  floats.push({ x: e.x + rand(-10, 10), y: e.y - e.r - 6 - (e.z || 0), text: Math.round(dmg) + (big ? '!' : ''), color: big ? '#ffd166' : '#ffffff', t: 0, life: big ? 0.8 : 0.6, size: (e.kind === 'boss' ? 17 : 14) + (big ? 6 : 0) });
+  addFloat({ x: e.x + rand(-10, 10), y: e.y - e.r - 6 - (e.z || 0), text: Math.round(dmg) + (big ? '!' : ''), color: big ? '#ffd166' : '#ffffff', t: 0, life: big ? 0.8 : 0.6, size: (e.kind === 'boss' ? 17 : 14) + (big ? 6 : 0) });
   glowPuff(e.x + rand(-e.r, e.r) * 0.4, e.y - (e.z || 0) + rand(-e.r, e.r) * 0.4, '#ffffff', big ? 22 : 12, 0.12);
   sfx('hit', e.x, e.y);
   if (e.hp <= 0) killEnemy(e, src);
@@ -1176,7 +1215,7 @@ function killEnemy(e, src) {
   shock(e.x, e.y, e.kind === 'mob' && e.color ? lighten(e.color) : '#ffd166', e.r * 2.6, 0.35, 4);
   glowPuff(e.x, e.y, e.eye || '#ffd166', e.r * 1.6, 0.25);
   sfx('kill', e.x, e.y);
-  if (e.kind === 'elite') { flashScreen('#fff3c4', 0.25); sparkle(e.x, e.y, '#ffd166', 16, 220); }
+  if (e.kind === 'elite') { flashScreen('#fff3c4', 0.25, e.x, e.y); sparkle(e.x, e.y, '#ffd166', 16, 220); }
   if (killer) killer.kills++;
   if (killer === local && tut.step === 2) tut.kills++;
   // 빛 조각(경험치) 드롭
@@ -1194,7 +1233,7 @@ function killEnemy(e, src) {
   }
   if (e.kind === 'elite') {
     gifts.push({ x: e.x, y: e.y, opened: false, rich: true });
-    toast('🎁 정예 어둠을 물리쳤다! 선물상자가 나왔어요', '#ffd166');
+    toastAll('🎁 정예 어둠을 물리쳤다! 선물상자가 나왔어요', '#ffd166');
   }
   if (e.kind === 'boss') onBossDefeated(e);
 }
@@ -1218,9 +1257,9 @@ function wakeBoss(b) {
       toad: '꾸웨에엑! 독 웅덩이에서 헤엄쳐 볼 테냐?',
       nox: '흩어진 엘프 따위가… 감히 돌아왔느냐! 이 세상의 모든 크리스마스를 영원히 꺼 주마!',
     };
-    say(b.who, lines[b.who]);
-    toast('⚠ 보스 등장: ' + b.name, '#ff5a67');
-    sfx('roar'); shock(b.x, b.y, '#b04cff', 420, 0.7, 10); flashScreen('#3a1050', 0.35);
+    sayAll(b.who, lines[b.who]);
+    toastAll('⚠ 보스 등장: ' + b.name, '#ff5a67');
+    sfx('roar', b.x, b.y); shock(b.x, b.y, '#b04cff', 420, 0.7, 10); flashScreen('#3a1050', 0.35, b.x, b.y);
     shake = Math.max(shake, 10);
   }
 }
@@ -1234,11 +1273,11 @@ function onBossDefeated(b) {
     pickups.push({ type: 'shard', x: b.x, y: b.y, t: 0, boss: b.name });
     gifts.push({ x: b.x + 70, y: b.y + 20, opened: false, rich: true });
     gifts.push({ x: b.x - 70, y: b.y + 20, opened: false, rich: true });
-    say('narr', b.name + '이(가) 빛 속으로 사라졌어요. 그 자리에 ⭐별조각이 반짝이고 있어요!');
+    sayAll('narr', b.name + '이(가) 빛 속으로 사라졌어요. 그 자리에 ⭐별조각이 반짝이고 있어요!');
   } else {
     scrolls.push({ x: b.x, y: b.y, skill: def.skill, taken: false });
     gifts.push({ x: b.x + 70, y: b.y + 20, opened: false, rich: true });
-    say('narr', b.name + '이(가) 쓰러지며 ✦ 고대 엘프의 두루마리를 떨어뜨렸어요! 주우면 새 스킬을 배울 수 있어요.');
+    sayAll('narr', b.name + '이(가) 쓰러지며 ✦ 고대 엘프의 두루마리를 떨어뜨렸어요! 주우면 새 스킬을 배울 수 있어요.');
   }
   for (const e of enemies) if (e.summoned && !e.dead && dist(e.x, e.y, b.x, b.y) < 900) killEnemy(e, local);
   renderObjectives();
@@ -1391,7 +1430,7 @@ function updateBoss(b, dt) {
   const hpR = b.hp / b.maxHp;
   if (!b.enr && hpR < 0.5 && b.id !== 'lord') {
     b.enr = true;
-    toast('🔥 ' + b.name + '이(가) 분노했다!', '#ff7b3c');
+    toastAll('🔥 ' + b.name + '이(가) 분노했다!', '#ff7b3c');
   }
   const a2t = Math.atan2(tgt.y - b.y, tgt.x - b.x);
   b.face = tgt.x >= b.x ? 1 : -1;
@@ -1496,8 +1535,8 @@ function updateBoss(b, dt) {
     const ph = hpR > 0.66 ? 1 : hpR > 0.33 ? 2 : 3;
     if (ph !== b.phase) {
       b.phase = ph;
-      if (ph === 2) say('nox', '크윽… 아직이다! 어둠이여, 더 몰려와라!');
-      if (ph === 3) say('nox', '이럴 수가… 빛이 돌아오고 있어…! 아니, 함께 사라져라!!');
+      if (ph === 2) sayAll('nox', '크윽… 아직이다! 어둠이여, 더 몰려와라!');
+      if (ph === 3) sayAll('nox', '이럴 수가… 빛이 돌아오고 있어…! 아니, 함께 사라져라!!');
       ring(b.x, b.y, 36, 260, dmg * 0.6, 0, 9, '#ff3b6b');
       shake = 14; sfx('roar'); flashScreen('#ff3b6b', 0.35); shock(b.x, b.y, '#ff3b6b', 600, 0.8, 12);
     }
@@ -1691,11 +1730,29 @@ function updateBoss(b, dt) {
 // =====================================================================
 //  월드 초기화 / 진행
 // =====================================================================
-function startGame() {
+function startGame(opts) {
   const name = (el('nameInput').value || '').trim() || LOOKS[selectedLook].name;
   store('elf_name', name); store('elf_look', String(selectedLook));
-  players = [makePlayer(0, selectedLook, name)];
-  local = players[0];
+  const multi = Net.mode !== 'solo';
+  if (Net.mode === 'client' && opts) {
+    players = opts.players.map(o => { const q = makePlayer(o.id, clamp(o.look | 0, 0, LOOKS.length - 1), o.name); q.x = q.spawnX = o.x; q.y = q.spawnY = o.y; return q; });
+    local = players.find(q => q.id === Net.myId) || players[0];
+  } else if (Net.mode === 'host') {
+    const base = makePlayer(0, selectedLook, name);
+    players = [base];
+    const others = Net.roster.filter(r => r.pid !== 0 && r.conn);
+    others.forEach((r, i) => {
+      const q = makePlayer(r.pid, r.look, r.name), a = (i + 1) / (others.length + 1) * Math.PI * 2;
+      q.x = q.spawnX = clamp(base.x + Math.cos(a) * 110, 60, W - 60);
+      q.y = q.spawnY = clamp(base.y + Math.sin(a) * 110, 60, H - 60);
+      q.remote = true;
+      players.push(q);
+    });
+    local = base;
+  } else {
+    players = [makePlayer(0, selectedLook, name)];
+    local = players[0];
+  }
   enemies = []; bullets = []; ebullets = []; hazards = []; turrets = []; allies = []; zaps = []; pickups = []; particles = []; floats = []; toasts = [];
   fxTimers = []; screenFlashA = 0; hitStopT = 0;
   gifts = []; scrolls = [];
@@ -1703,30 +1760,48 @@ function startGame() {
   runTime = 0; spawnT = 0; graceT = 4; eliteT = 70; teamShards = 0;
   finalStarted = false; finalBoss = null; endingT = 0; treeLight = 0; barrierMsgT = 0; barrierBreak = 0;
   Object.assign(tut, { step: 0, moved: 0, shots: 0, kills: 0, dashed: 0, gifts: 0, done: false });
+  if (multi) Object.assign(tut, { step: 5, done: true });       // 친구들과 할 땐 튜토리얼은 건너뛰어요
 
-  for (const d of BOSS_DEFS) enemies.push(makeBoss(d));
-  // 선물상자 흩뿌리기 (트리에 가까울수록 좋은 선물)
-  for (let i = 0; i < 140; i++) {
-    const a = Math.random() * Math.PI * 2, d = rand(650, 4300);
-    gifts.push({ x: clamp(CX + Math.cos(a) * d, 120, W - 120), y: clamp(CY + Math.sin(a) * d, 120, H - 120), opened: false, rich: d < 2300 });
+  if (Net.mode !== 'client') {
+    const scale = 1 + 0.35 * (players.length - 1);               // 인원이 많을수록 보스가 튼튼해져요
+    for (const d of BOSS_DEFS) { const b = makeBoss(d); b.hp = b.maxHp = d.hp * scale; enemies.push(b); }
+    // 선물상자 흩뿌리기 (트리에 가까울수록 좋은 선물)
+    for (let i = 0; i < 140; i++) {
+      const a = Math.random() * Math.PI * 2, d = rand(650, 4300);
+      gifts.push({ x: clamp(CX + Math.cos(a) * d, 120, W - 120), y: clamp(CY + Math.sin(a) * d, 120, H - 120), opened: false, rich: d < 2300 });
+    }
+    // 시작 지점 근처 튜토리얼용 선물
+    const ta = Math.atan2(CY - local.y, CX - local.x);
+    gifts.push({ x: local.x + Math.cos(ta) * 260 + 80, y: local.y + Math.sin(ta) * 260, opened: false, rich: false, tutorial: true });
+  } else {
+    gifts = opts.gifts.map(([x, y, opened, rich]) => ({ x, y, opened: !!opened, rich: !!rich }));
   }
-  // 시작 지점 근처 튜토리얼용 선물
-  const ta = Math.atan2(CY - local.y, CX - local.x);
-  gifts.push({ x: local.x + Math.cos(ta) * 260 + 80, y: local.y + Math.sin(ta) * 260, opened: false, rich: false, tutorial: true });
 
   cam.x = local.x - VW / 2; cam.y = local.y - VH / 2;
   el('lobby').style.display = 'none';
+  el('overlay').classList.remove('on');
   el('paneLog').innerHTML = '';
   story.queue = []; story.cur = null;
   state = 'play'; paused = false;
-  say('holly', name + '! 정신이 드니? 다행이야… 무사했구나!');
-  say('holly', '트리의 빛이 깨지면서 ⭐별조각 ' + SHARDS + '개가 여섯 지역 — 눈 숲, 빙하, 화산, 사막, 정글, 습지로 날아갔어. 지역마다 어둠의 수호자가 하나씩 지키고 있단다.');
-  say('holly', '각 지역의 중간 보스를 쓰러뜨리면 ✦ 고대 엘프의 두루마리가 나와. 새로운 스킬을 배울 수 있지!');
-  say('holly', '별조각 ' + SHARDS + '개를 모아 트리로 돌아와 줘. 그러면 빛을 다시 켜고 「영원한 크리스마스」 주문을 걸 수 있어!');
   const sb = biomeAt(local.x, local.y);
   local.seen[sb.id] = true;
-  say('narr', name + '은(는) ' + sb.icon + ' 「' + sb.name + '」 지역에서 눈을 떴어요.');
-  say('spark', '안녕! 난 요정 반짝이야 ✨ 먼저 몸을 풀어 보자. WASD 또는 방향키(←↑↓→)로 움직여 봐!');
+  if (multi) {
+    say('holly', local.name + '! 친구들과 함께 왔구나! 다 같이 힘을 모으면 어둠도 무섭지 않단다. (' + players.length + '명)');
+    say('holly', '⭐별조각 ' + SHARDS + '개가 여섯 지역 — 눈 숲, 빙하, 화산, 사막, 정글, 습지로 날아갔어. 지역마다 어둠의 수호자가 지키고 있지.');
+    say('narr', '엘프들은 ' + sb.icon + ' 「' + sb.name + '」 지역에서 함께 눈을 떴어요.');
+    say('spark', '튜토리얼은 건너뛸게! 머리 위 이름으로 친구를 찾고, 서로 도와줘. 💀는 수호자(별조각), 👹는 중간 보스(새 스킬)야!');
+  } else {
+    say('holly', name + '! 정신이 드니? 다행이야… 무사했구나!');
+    say('holly', '트리의 빛이 깨지면서 ⭐별조각 ' + SHARDS + '개가 여섯 지역 — 눈 숲, 빙하, 화산, 사막, 정글, 습지로 날아갔어. 지역마다 어둠의 수호자가 하나씩 지키고 있단다.');
+    say('holly', '각 지역의 중간 보스를 쓰러뜨리면 ✦ 고대 엘프의 두루마리가 나와. 새로운 스킬을 배울 수 있지!');
+    say('holly', '별조각 ' + SHARDS + '개를 모아 트리로 돌아와 줘. 그러면 빛을 다시 켜고 「영원한 크리스마스」 주문을 걸 수 있어!');
+    say('narr', name + '은(는) ' + sb.icon + ' 「' + sb.name + '」 지역에서 눈을 떴어요.');
+    say('spark', '안녕! 난 요정 반짝이야 ✨ 먼저 몸을 풀어 보자. WASD 또는 방향키(←↑↓→)로 움직여 봐!');
+  }
+  if (Net.mode === 'host') {
+    Net.events = []; Net.targeted = {}; Net.giftSig = -1; Net.sendT = 0;
+    hostBroadcast({ t: 'start', players: players.map(q => ({ id: q.id, name: q.name, look: LOOKS.indexOf(q.look), x: Math.round(q.x), y: Math.round(q.y) })), gifts: gifts.map(g => [Math.round(g.x), Math.round(g.y), 0, g.rich ? 1 : 0]) });
+  }
   renderObjectives();
 }
 
@@ -1793,7 +1868,7 @@ function spawner(dt) {
         let t = pickMobType(p.x, p.y);
         for (let k = 0; k < 6 && ETYPES[t].bomb; k++) t = pickMobType(p.x, p.y);
         enemies.push(makeEnemy(ETYPES[t].bomb ? 'tank' : t, x, y, z, 'elite'));
-        toast('⚠ 정예 어둠이 나타났다! 물리치면 선물을 줘요', '#ff9a3c');
+        toastAll('⚠ 정예 어둠이 나타났다! 물리치면 선물을 줘요', '#ff9a3c');
       }
     }
   }
@@ -1819,7 +1894,7 @@ function openGift(p, g) {
     const t = missing[0];
     p.weapons.push({ type: t, lvl: 1 });
     msg = '🎁 ' + WEAPONS[t].icon + ' ' + WEAPONS[t].name + ' 획득! [' + (WEAPON_ORDER.indexOf(t) + 1) + ']키로 바꿔요';
-    if (t === 'star') say('spark', '우와, 별빛 레이저! 적을 꿰뚫고 지나가는 전설의 무기야!');
+    if (t === 'star') notify(p, 'S', 'spark', '우와, 별빛 레이저! 적을 꿰뚫고 지나가는 전설의 무기야!');
   } else if (r < 0.66) {
     const up = p.weapons.filter(w => w.lvl < 5);
     if (up.length) {
@@ -1836,7 +1911,7 @@ function openGift(p, g) {
     p.maxHp += n; p.hp += n;
     msg = '🎁 💖 따뜻한 코코아! 최대 체력 +' + n;
   }
-  if (p === local) toast(msg, '#ffd166');
+  notify(p, 'T', msg, '#ffd166');
 }
 
 function updatePickups(dt) {
@@ -1847,9 +1922,9 @@ function updatePickups(dt) {
       s.taken = true;
       for (const q of players) q.skills[s.skill] = true;
       burst(s.x, s.y, '#c9b6ff', 40, 260);
-      sparkle(s.x, s.y, '#c9b6ff', 24, 260); shock(s.x, s.y, '#c77dff', 300, 0.7, 8); flashScreen('#e9dcff', 0.4); sfx('scroll');
+      sparkle(s.x, s.y, '#c9b6ff', 24, 260); shock(s.x, s.y, '#c77dff', 300, 0.7, 8); flashScreen('#e9dcff', 0.4, s.x, s.y); sfx('scroll');
       const sk = SKILLS[s.skill];
-      toast('✦ 새 스킬: [' + sk.key + '] ' + sk.icon + ' ' + sk.name + '!', '#c9b6ff');
+      toastAll('✦ 새 스킬: [' + sk.key + '] ' + sk.icon + ' ' + sk.name + '!', '#c9b6ff');
       const lines = {
         nova: '고대 엘프의 두루마리! [Q] 서리 폭발 — 주변 어둠을 얼리고 날려 보내. 적 탄환도 지워 줘!',
         turret: '고대 엘프의 두루마리! [E] 선물 포탑 — 9초 동안 자동으로 어둠을 쏘는 선물상자를 설치해!',
@@ -1858,7 +1933,7 @@ function updatePickups(dt) {
         heal: '고대 엘프의 두루마리! [C] 치유의 종 — 종을 울리면 나와 친구들의 체력이 회복되고 잠깐 무적이 돼!',
         rudolph: '고대 엘프의 두루마리! [V] 루돌프 돌진 — 빨간 코 루돌프가 달려와서 앞의 어둠을 모두 들이받아!',
       };
-      say('spark', lines[s.skill]);
+      sayAll('spark', lines[s.skill]);
     }
   }
   for (const k of pickups) {
@@ -1873,27 +1948,27 @@ function updatePickups(dt) {
     }
     if (d > 30) continue;
     k.dead = true;
-    if (k.type === 'xp') { gainXp(p, k.v); sfx('xp'); glowPuff(p.x, p.y - 8, '#fff3a0', 10, 0.15); }
+    if (k.type === 'xp') { gainXp(p, k.v); sfx('xp', p.x, p.y); glowPuff(p.x, p.y - 8, '#fff3a0', 10, 0.15); }
     if (k.type === 'cookie') {
       const h = 25 * (p.luck > 1 ? 1.5 : 1);
-      p.hp = Math.min(p.maxHp, p.hp + h); sfx('cookie');
-      floats.push({ x: p.x, y: p.y - 30, text: '+' + Math.round(h) + ' 🍪', color: '#7dffa8', t: 0, life: 0.9, size: 17 });
+      p.hp = Math.min(p.maxHp, p.hp + h); sfx('cookie', p.x, p.y);
+      addFloat({ x: p.x, y: p.y - 30, text: '+' + Math.round(h) + ' 🍪', color: '#7dffa8', t: 0, life: 0.9, size: 17 });
     }
     if (k.type === 'shard') {
       teamShards++;
       burst(k.x, k.y, '#ffd166', 50, 300);
       sparkle(k.x, k.y, '#ffd166', 30, 320, 1.3); shock(k.x, k.y, '#ffd166', 380, 0.8, 10); shock(k.x, k.y, '#ffffff', 220, 0.5, 6);
       flashScreen('#fff3c4', 0.55); hitStop(0.1); sfx('shard');
-      toast('⭐ 별조각 ' + teamShards + '/' + SHARDS + ' 획득!', '#ffd166');
+      toastAll('⭐ 별조각 ' + teamShards + '/' + SHARDS + ' 획득!', '#ffd166');
       if (teamShards === CHAIN_REWARD) {
         for (const q of players) q.skills.chain = true;
-        say('holly', '별조각이 ' + CHAIN_REWARD + '개나 모였구나! 별빛의 힘을 나눠 줄게 — [F] ⚡번개 사슬! 적들 사이를 번개가 튕겨 다닌단다.');
-        toast('✦ 새 스킬: [F] ⚡ 번개 사슬!', '#c9b6ff');
+        sayAll('holly', '별조각이 ' + CHAIN_REWARD + '개나 모였구나! 별빛의 힘을 나눠 줄게 — [F] ⚡번개 사슬! 적들 사이를 번개가 튕겨 다닌단다.');
+        toastAll('✦ 새 스킬: [F] ⚡ 번개 사슬!', '#c9b6ff');
       }
-      if (teamShards < SHARDS) say('holly', '해냈구나! 별조각이 따뜻하게 빛나고 있어… (' + teamShards + '/' + SHARDS + ') 남은 수호자도 부탁해!');
+      if (teamShards < SHARDS) sayAll('holly', '해냈구나! 별조각이 따뜻하게 빛나고 있어… (' + teamShards + '/' + SHARDS + ') 남은 수호자도 부탁해!');
       else {
-        say('holly', '별조각 ' + SHARDS + '개가 모두 모였어!! 트리로 가자! 어둠의 장벽이 별빛에 반응하고 있어!');
-        say('spark', '지도 한가운데 🎄로 가! 노란 화살표를 따라와!');
+        sayAll('holly', '별조각 ' + SHARDS + '개가 모두 모였어!! 트리로 가자! 어둠의 장벽이 별빛에 반응하고 있어!');
+        sayAll('spark', '지도 한가운데 🎄로 가! 노란 화살표를 따라와!');
       }
       renderObjectives();
     }
@@ -1912,7 +1987,7 @@ function checkFinal() {
   for (let i = 0; i < 3; i++) later(i * 0.2, () => shock(CX, CY, i % 2 ? '#ffd166' : '#b04cff', BARRIER_R + 300 + i * 200, 0.9, 10));
   shake = 20;
   burst(CX, CY, '#ffd166', 80, 500);
-  say('narr', '별조각 ' + SHARDS + '개가 하늘로 솟구치자 어둠의 장벽이 와장창 깨졌어요! 그 순간, 트리 뒤에서 거대한 그림자가 일어섰어요…');
+  sayAll('narr', '별조각 ' + SHARDS + '개가 하늘로 솟구치자 어둠의 장벽이 와장창 깨졌어요! 그 순간, 트리 뒤에서 거대한 그림자가 일어섰어요…');
   finalBoss = makeBoss(FINAL_DEF);
   finalBoss.hp = finalBoss.maxHp = FINAL_DEF.hp * (1 + 0.5 * (players.length - 1));
   enemies.push(finalBoss);
@@ -1976,6 +2051,10 @@ function makeBolt() {
   return { t0: endingT, pts, branch };
 }
 function updateCinematic(dt) {
+  Net.noRec = true;
+  try { updateCinematicBody(dt); } finally { Net.noRec = false; }
+}
+function updateCinematicBody(dt) {
   const T = endingT;
   while (cine.lineIdx < ENDING_LINES.length && T >= ENDING_LINES[cine.lineIdx].t) {
     const L = ENDING_LINES[cine.lineIdx++];
@@ -2302,12 +2381,23 @@ function update(dt) {
     }
   }
   allies = allies.filter(a => a.t > 0);
-  for (const z of zaps) z.t += dt;
-  zaps = zaps.filter(z => z.t < 0.3);
 
   updatePickups(dt);
   enemies = enemies.filter(e => !e.dead);
 
+  updateCosmetics(dt);
+
+  if (state === 'ending') {
+    endingT += dt;
+    treeLight = Math.min(1, endingT / 4);
+    updateCinematic(dt);
+    if (endingT > CINE_END && state !== 'win') showWin();
+  }
+
+  updateCamera(dt);
+}
+
+function updateCosmetics(dt) {
   for (const p of particles) {
     p.x += p.vx * dt; p.y += p.vy * dt;
     if (p.g) p.vy += p.g * dt; else { p.vx *= 0.94; p.vy *= 0.94; }
@@ -2328,14 +2418,10 @@ function update(dt) {
   shake = Math.max(0, shake - dt * 30);
   hurtVignette = Math.max(0, hurtVignette - dt);
   barrierBreak = Math.max(0, barrierBreak - dt);
-
-  if (state === 'ending') {
-    endingT += dt;
-    treeLight = Math.min(1, endingT / 4);
-    updateCinematic(dt);
-    if (endingT > CINE_END && state !== 'win') showWin();
-  }
-
+  for (const z of zaps) z.t += dt;
+  zaps = zaps.filter(z => z.t < 0.3);
+}
+function updateCamera(dt) {
   // 카메라
   if (local) {
     const ending = state === 'ending';
@@ -2353,6 +2439,7 @@ function explode(x, y, R, dmg, owner) {
   shake = Math.max(shake, 4); sfx('explode', x, y);
 }
 function burst(x, y, color, n, spd) {
+  rec(['b', Math.round(x), Math.round(y), color, n, spd]);
   for (let i = 0; i < n; i++) {
     const a = Math.random() * Math.PI * 2, s = Math.random() * spd, k = Math.random();
     const life = rand(0.3, 0.8);
@@ -2395,22 +2482,30 @@ function glowSprite(color) {
   return (glowCache[color] = cv);
 }
 function later(t, fn) { fxTimers.push({ t, fn }); }
-function flashScreen(color, a) { screenFlashColor = color; screenFlashA = Math.max(screenFlashA, a); }
-function hitStop(t) { hitStopT = Math.max(hitStopT, t); }
+function flashScreen(color, a, x, y) {
+  rec(['F', x === undefined ? null : Math.round(x), y === undefined ? null : Math.round(y), color, a]);
+  if (x !== undefined && local && dist(x, y, local.x, local.y) > 900) return;
+  screenFlashColor = color; screenFlashA = Math.max(screenFlashA, a);
+}
+function hitStop(t) { hitStopT = Math.max(hitStopT, t); rec(['h', null, null, t]); }
 function shock(x, y, color, r1, life = 0.45, w = 6) {
+  rec(['k', Math.round(x), Math.round(y), color, Math.round(r1), life, w]);
   particles.push({ kind: 'ring', x, y, vx: 0, vy: 0, r0: 8, r1, life, max: life, color, size: w });
 }
 function sparkle(x, y, color, n, spd = 160, life = 0.9) {
+  rec(['p', Math.round(x), Math.round(y), color, n, spd, life]);
   for (let i = 0; i < n; i++) {
     const a = Math.random() * Math.PI * 2, s = Math.random() * spd;
     particles.push({ kind: 'star', x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 40, life: rand(life * 0.5, life), max: life, color, size: rand(3, 7), rot: Math.random() * 6 });
   }
 }
 function glowPuff(x, y, color, size, life = 0.25, vx = 0, vy = 0) {
+  if (size >= 16) rec(['g', Math.round(x), Math.round(y), color, Math.round(size), life]);
   if (fxLow && size < 30) return;
   particles.push({ kind: 'glow', x, y, vx, vy, life, max: life, color, size });
 }
 function confetti(x, y, n) {
+  rec(['c', Math.round(x), Math.round(y), n]);
   const cols = ['#e63946', '#ffd166', '#3ddc97', '#4aa3ff', '#ff9ecd', '#ffffff'];
   for (let i = 0; i < n; i++) {
     const a = -Math.PI / 2 + rand(-1.1, 1.1), s = rand(150, 380);
@@ -2543,8 +2638,9 @@ const SFXS = {
   click: v => tone(660, 0.06, { type: 'triangle', vol: 0.07 * v }),
   alert: v => arp(['A5', 'E6'], 0.08, 'square', 0.03 * v, 0.12),
 };
-const SFX_GAP = { hit: 0.035, xp: 0.03, kill: 0.04, eshot: 0.1, shoot_icicle: 0.06, shoot_turret: 0.12, explode: 0.06, burn: 0.45, firework: 0.12, hurt: 0.15 };
+const SFX_GAP = { dash: 0.15, hit: 0.035, xp: 0.03, kill: 0.04, eshot: 0.1, shoot_icicle: 0.06, shoot_turret: 0.12, explode: 0.06, burn: 0.45, firework: 0.12, hurt: 0.15 };
 function sfx(name, x, y) {
+  rec(['s', x === undefined ? null : Math.round(x), y === undefined ? null : Math.round(y), name]);
   if (!Snd.ac || !Snd.sfxOn) return;
   let vm = 1;
   if (x !== undefined && local && state !== 'lobby') {
@@ -2668,6 +2764,513 @@ function updateSoundButtons() {
   el('sfxBtn').classList.toggle('off', !Snd.sfxOn);
 }
 
+
+// =====================================================================
+//  멀티플레이 (최대 21명)
+//  · 방장(host)의 컴퓨터가 적·보스·탄환 등 게임 전체를 계산해요
+//  · 친구들(client)은 자기 엘프를 직접 움직이고, 방장이 보내 주는 화면 정보를 받아 그려요
+//  · 연결: WebRTC P2P (PeerJS 공개 연결 서버로 서로를 찾아요). 주소 끝에 ?net=local 을 붙이면
+//    같은 컴퓨터의 여러 창끼리 연결하는 테스트 모드가 돼요.
+// =====================================================================
+const NET_LOCAL = /[?&]net=local/.test(location.search);
+const Net = {
+  mode: 'solo', ui: 'solo', myId: 0, code: '', status: '', link: null, host: null, nextPid: 1,
+  roster: [], events: [], targeted: {}, noRec: false, sendT: 0, lobT: 0, inT: 0, giftSig: -1, lastSnap: 0,
+};
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function makeCode() { let s = ''; for (let i = 0; i < 5; i++) s += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]; return s; }
+let uidSeq = 0;
+
+// ---------- 이벤트 (방장 화면에서 일어난 효과를 친구들에게도 보여 주기) ----------
+function rec(ev) { if (Net.mode === 'host' && !Net.noRec && (state === 'play' || state === 'ending')) Net.events.push(ev); }
+function sayAll(who, text) { say(who, text); rec(['S', null, null, who, text]); }
+function toastAll(text, color) { toast(text, color); rec(['T', null, null, text, color]); }
+function addFloat(f) { floats.push(f); rec(['f', Math.round(f.x), Math.round(f.y), f.text, f.color, f.life, f.size]); }
+function notify(p, code, a, b) {
+  if (p === local) {
+    if (code === 'T') toast(a, b);
+    else if (code === 'S') say(a, b);
+    else if (code === 'V') { shake = Math.max(shake, 7); hurtVignette = 0.5; }
+    return;
+  }
+  if (Net.mode === 'host' && p.remote) (Net.targeted[p.id] = Net.targeted[p.id] || []).push([code, null, null, a, b]);
+}
+function pillar(x, y, cols, n, spread, vy0, vy1) {
+  for (let i = 0; i < n; i++) particles.push({ kind: 'glow', x: x + rand(-spread, spread), y: y + rand(-10, 25), vx: rand(-18, 18), vy: rand(vy0, vy1), g: 50, life: rand(0.6, 1.1), max: 1.1, color: pick(cols), size: rand(3, 8) });
+  rec(['L', Math.round(x), Math.round(y), cols, n, spread, vy0, vy1]);
+}
+function playEvent(e) {
+  const [c, x, y, a, b, d, f] = e;
+  switch (c) {
+    case 'b': burst(x, y, a, b, d); break;
+    case 'k': shock(x, y, a, b, d, f); break;
+    case 'p': sparkle(x, y, a, b, d, f); break;
+    case 'g': glowPuff(x, y, a, b, d); break;
+    case 'c': confetti(x, y, a); break;
+    case 'f': floats.push({ x, y, text: a, color: b, t: 0, life: d, size: f }); break;
+    case 's': sfx(a, x === null ? undefined : x, y === null ? undefined : y); break;
+    case 'z': zaps.push({ pts: a, t: 0 }); break;
+    case 'L': pillar(x, y, a, b, d, f, e[7]); break;
+    case 'F': flashScreen(a, b, x === null ? undefined : x, y === null ? undefined : y); break;
+    case 'h': hitStop(a); break;
+    case 'T': toast(a, b); break;
+    case 'S': say(a, b); break;
+    case 'V': shake = Math.max(shake, 7); hurtVignette = 0.5; sfx('hurt'); break;
+  }
+}
+
+// ---------- 연결 (PeerJS 또는 같은 컴퓨터 테스트용 BroadcastChannel) ----------
+function loadPeer() {
+  if (window.Peer) return Promise.resolve();
+  const urls = [
+    'https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js',
+    'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js',
+    'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js',
+  ];
+  return new Promise((res, rej) => {
+    const tryNext = i => {
+      if (i >= urls.length) return rej('load');
+      const s = document.createElement('script');
+      s.src = urls[i];
+      s.onload = () => (window.Peer ? res() : tryNext(i + 1));
+      s.onerror = () => { s.remove(); tryNext(i + 1); };
+      document.head.appendChild(s);
+    };
+    tryNext(0);
+  });
+}
+function wrapConn(c) {
+  const w = { onData: null, onClose: null, open: true };
+  w.send = d => { try { if (c.open) c.send(d); } catch (e) { /* 끊긴 연결 */ } };
+  w.close = () => { try { c.close(); } catch (e) { /* 이미 닫힘 */ } };
+  c.on('data', d => w.onData && w.onData(d));
+  const closed = () => { if (!w.open) return; w.open = false; if (w.onClose) w.onClose(); };
+  c.on('close', closed); c.on('error', closed);
+  return w;
+}
+function netOpenHost(code, onConn, onReady, onError) {
+  if (NET_LOCAL) {
+    const bc = new BroadcastChannel('xmaself-' + code), conns = {};
+    bc.onmessage = ev => {
+      const m = ev.data;
+      if (m.to !== 'host') return;
+      if (m.t === 'hello') {
+        const w = { open: true, onData: null, onClose: null, send: d => bc.postMessage({ to: m.from, from: 'host', d }), close: () => bc.postMessage({ to: m.from, from: 'host', t: 'bye' }) };
+        conns[m.from] = w;
+        bc.postMessage({ to: m.from, from: 'host', t: 'welcome' });
+        onConn(w);
+      } else if (conns[m.from]) {
+        const w = conns[m.from];
+        if (m.t === 'bye') { delete conns[m.from]; w.open = false; if (w.onClose) w.onClose(); } else if (w.onData) w.onData(m.d);
+      }
+    };
+    Net.link = { close: () => { for (const k in conns) conns[k].close(); bc.close(); } };
+    setTimeout(onReady, 30);
+    return;
+  }
+  loadPeer().then(() => {
+    const peer = new Peer('xmaself-' + code, { debug: 0 });
+    Net.link = { close: () => peer.destroy() };
+    peer.on('open', () => onReady());
+    peer.on('connection', c => c.on('open', () => onConn(wrapConn(c))));
+    peer.on('error', e => onError(e.type || String(e)));
+    peer.on('disconnected', () => { try { peer.reconnect(); } catch (e) { /* 다시 연결 실패 */ } });
+  }, () => onError('load'));
+}
+function netOpenJoin(code, onOpen, onError) {
+  if (NET_LOCAL) {
+    const me = 'c' + Math.random().toString(36).slice(2, 9), bc = new BroadcastChannel('xmaself-' + code);
+    const w = { open: true, onData: null, onClose: null, send: d => bc.postMessage({ to: 'host', from: me, d }), close: () => bc.postMessage({ to: 'host', from: me, t: 'bye' }) };
+    let ok = false;
+    bc.onmessage = ev => {
+      const m = ev.data;
+      if (m.to !== me) return;
+      if (m.t === 'welcome') { ok = true; onOpen(w); }
+      else if (m.t === 'bye') { w.open = false; if (w.onClose) w.onClose(); }
+      else if (w.onData) w.onData(m.d);
+    };
+    bc.postMessage({ to: 'host', from: me, t: 'hello' });
+    Net.link = { close: () => { w.close(); bc.close(); } };
+    setTimeout(() => { if (!ok) onError('peer-unavailable'); }, 1500);
+    return;
+  }
+  loadPeer().then(() => {
+    const peer = new Peer({ debug: 0 });
+    let ok = false;
+    Net.link = { close: () => peer.destroy() };
+    peer.on('open', () => {
+      const c = peer.connect('xmaself-' + code, { serialization: 'json', reliable: true });
+      c.on('open', () => { ok = true; onOpen(wrapConn(c)); });
+    });
+    peer.on('error', e => onError(e.type || String(e)));
+    setTimeout(() => { if (!ok) onError('timeout'); }, 15000);
+  }, () => onError('load'));
+}
+function netLeave() {
+  if (Net.host) { try { Net.host.close(); } catch (e) { /* 무시 */ } }
+  for (const r of Net.roster) if (r.conn) { try { r.conn.close(); } catch (e) { /* 무시 */ } }
+  if (Net.link) { try { Net.link.close(); } catch (e) { /* 무시 */ } }
+  Object.assign(Net, { mode: 'solo', myId: 0, code: '', link: null, host: null, roster: [], events: [], targeted: {}, nextPid: 1, giftSig: -1, lastSnap: 0 });
+  updateNetUI();
+}
+const NET_ERR = {
+  'peer-unavailable': '그 코드의 방을 찾을 수 없어요. 코드를 다시 확인해 주세요.',
+  'timeout': '연결 시간이 너무 오래 걸려요. 코드와 인터넷을 확인해 주세요.',
+  'load': '연결 도구를 불러오지 못했어요. 인터넷에 연결되어 있는지 확인해 주세요.',
+  'network': '연결 서버에 닿을 수 없어요. 인터넷(학교망이면 방화벽)을 확인해 주세요.',
+  'server-error': '연결 서버에 문제가 있어요. 잠시 뒤 다시 해 주세요.',
+  'browser-incompatible': '이 브라우저는 멀티플레이를 지원하지 않아요. 크롬이나 엣지를 써 주세요.',
+};
+
+// ---------- 방장 ----------
+function hostCreate() {
+  netLeave();
+  Net.ui = 'host'; Net.mode = 'host'; Net.code = makeCode(); Net.status = '방을 만드는 중…';
+  Net.roster = [{ pid: 0, name: '', look: selectedLook, fx: 0.3, fy: 0.75, face: 1, walk: 0, moving: false }];
+  updateNetUI();
+  netOpenHost(Net.code, hostOnConn, () => {
+    Net.status = '방이 열렸어요! 친구에게 코드를 알려 주세요.';
+    say('spark', '방을 만들었어! 친구들에게 코드 「' + Net.code + '」를 알려 줘. 모두 모이면 [모두 함께 시작]을 눌러!');
+    updateNetUI();
+  }, err => {
+    if (err === 'unavailable-id') { hostCreate(); return; }
+    const msg = NET_ERR[err] || '방을 열 수 없어요 (' + err + ')';
+    netLeave(); Net.ui = 'host'; Net.status = msg; updateNetUI();
+  });
+}
+function hostOnConn(w) {
+  if (state !== 'lobby' || Net.roster.length >= MAX_PLAYERS) {
+    w.send({ t: 'full', reason: state !== 'lobby' ? '이미 게임이 시작됐어요. 방장이 로비로 돌아오면 다시 들어와 주세요.' : '방이 꽉 찼어요 (최대 21명).' });
+    setTimeout(() => w.close(), 400);
+    return;
+  }
+  const pid = Net.nextPid++;
+  const r = { pid, name: '엘프' + pid, look: pid % LOOKS.length, fx: 0.2 + Math.random() * 0.6, fy: 0.72, face: 1, walk: 0, moving: false, conn: w };
+  Net.roster.push(r);
+  w.onData = d => hostOnData(r, d);
+  w.onClose = () => hostOnLeave(r);
+  w.send({ t: 'welcome', pid, code: Net.code });
+  toast('👋 새 친구가 들어왔어요! (' + Net.roster.length + '/' + MAX_PLAYERS + ')', '#7dffa8');
+  sfx('gift');
+  updateNetUI();
+}
+function hostOnLeave(r) {
+  if (!Net.roster.includes(r)) return;
+  Net.roster = Net.roster.filter(x => x !== r);
+  const p = players.find(q => q.id === r.pid);
+  if (p) players = players.filter(q => q !== p);
+  if (state === 'lobby') toast('👋 ' + r.name + '이(가) 나갔어요', '#9fd3ff');
+  else toastAll('👋 ' + r.name + '이(가) 나갔어요', '#9fd3ff');
+  updateNetUI();
+}
+function hostOnData(r, d) {
+  if (!d || typeof d !== 'object') return;
+  if (d.t === 'lob') {
+    r.name = String(d.name || '').slice(0, 8) || r.name;
+    r.look = clamp(d.look | 0, 0, LOOKS.length - 1);
+    r.fx = +d.fx || 0; r.fy = +d.fy || 0; r.face = d.face > 0 ? 1 : -1; r.walk = +d.walk || 0; r.moving = !!d.moving;
+  } else if (d.t === 'in') {
+    const p = players.find(q => q.id === r.pid);
+    if (p) p.net = d;
+  } else if (d.t === 'sk') {
+    const p = players.find(q => q.id === r.pid);
+    if (p && !p.dead && SKILLS[d.s] && state === 'play') {
+      p.aim = +d.aim || 0;
+      if (d.ix !== undefined) { p.ix = +d.ix || 0; p.iy = +d.iy || 0; }
+      p.netTarget = d.tx !== undefined ? { x: +d.tx, y: +d.ty } : null;
+      useSkill(p, d.s);
+    }
+  }
+}
+function hostBroadcast(msg) { for (const r of Net.roster) if (r.conn) r.conn.send(msg); }
+function hostLobbyTick(dt) {
+  const me = Net.roster[0], area = VW > 760 ? VW - 404 : VW;
+  if (me) Object.assign(me, { name: (el('nameInput').value || LOOKS[selectedLook].name).slice(0, 8), look: selectedLook, fx: lobbyElf.x / area, fy: lobbyElf.y / VH, face: lobbyElf.face, walk: lobbyElf.walk, moving: !!lobbyElf.moving });
+  Net.lobT -= dt;
+  if (Net.lobT > 0) return;
+  Net.lobT = 0.1;
+  const list = Net.roster.map(r => ({ pid: r.pid, name: r.name, look: r.look, fx: +r.fx.toFixed(3), fy: +r.fy.toFixed(3), face: r.face, walk: +r.walk.toFixed(2), moving: r.moving }));
+  hostBroadcast({ t: 'roster', list });
+}
+function encEnemy(e) {
+  const fl = (e.kind === 'elite' ? 1 : 0) | (e.burrowed ? 2 : 0) | (e.slowT > 0 ? 4 : 0) | (e.flash > 0 ? 8 : 0) | (e.fuse ? 16 : 0) | (e.cstate === 'wind' ? 32 : 0) | (e.awake ? 64 : 0) | (e.enr ? 128 : 0);
+  const a = [e.uid, e.type, Math.round(e.x), Math.round(e.y), Math.round(e.z || 0), Math.round(e.hp), Math.round(e.maxHp), +e.r.toFixed(1), fl];
+  if (e.kind === 'boss') a.push(e.state, +(e.ang || 0).toFixed(2), e.face || 1, e.phase || 1, +(e.t || 0).toFixed(2), e.name);
+  else if (e.cstate === 'wind') a.push(+(e.cang || 0).toFixed(2));
+  return a;
+}
+function hostSend(dt) {
+  Net.sendT -= dt;
+  if (Net.sendT > 0) return;
+  Net.sendT = 1 / 12;
+  const evs = Net.events; Net.events = [];
+  const gsig = gifts.length * 1000 + gifts.reduce((n, g) => n + (g.opened ? 1 : 0), 0);
+  const G = gsig !== Net.giftSig ? gifts.map(g => [Math.round(g.x), Math.round(g.y), g.opened ? 1 : 0, g.rich ? 1 : 0]) : undefined;
+  Net.giftSig = gsig;
+  const common = {
+    t: 's', rt: +runTime.toFixed(2), st: state, et: +endingT.toFixed(2), sh: teamShards, fs: finalStarted ? 1 : 0,
+    bd: Object.keys(bossDefeated), sk: +shake.toFixed(1),
+    P: players.map(q => [q.id, Math.round(q.x), Math.round(q.y), +q.aim.toFixed(2), q.dead ? 1 : 0, Math.round(q.hp), q.maxHp, q.level, q.moving ? 1 : 0, q.invuln > 0 ? 1 : 0, LOOKS.indexOf(q.look), q.name, +q.walk.toFixed(2), q.weapons[q.wIdx] ? q.weapons[q.wIdx].type : 'cane']),
+    S: scrolls.filter(s => !s.taken).map(s => [Math.round(s.x), Math.round(s.y), s.skill]),
+    A: allies.map(a => [a.type, Math.round(a.x), Math.round(a.y), +(a.a || 0).toFixed(2), +a.t.toFixed(2)]),
+    T: turrets.map(t => [Math.round(t.x), Math.round(t.y), +t.aim.toFixed(2), +t.t.toFixed(1)]),
+  };
+  if (G) common.G = G;
+  for (const r of Net.roster) {
+    if (!r.conn) continue;
+    const p = players.find(q => q.id === r.pid);
+    if (!p) continue;
+    const near = (x, y, m) => Math.abs(x - p.x) < m && Math.abs(y - p.y) < m;
+    const cols = [], ci = c => { let i = cols.indexOf(c); if (i < 0) { i = cols.length; cols.push(c); } return i; };
+    const msg = Object.assign({}, common);
+    msg.me = {
+      tp: p.tpSeq || 0, x: Math.round(p.x), y: Math.round(p.y), hp: Math.round(p.hp), maxHp: p.maxHp, xp: +p.xp.toFixed(1), xpNext: p.xpNext, level: p.level,
+      kills: p.kills, deaths: p.deaths, dead: p.dead ? 1 : 0, rt: +p.respawnT.toFixed(1), slow: +p.slowT.toFixed(2), inv: +p.invuln.toFixed(2),
+      w: p.weapons.map(w => [w.type, w.lvl]), sk: SKILL_ORDER.filter(s => p.skills[s]), cd: SKILL_ORDER.map(s => +p.cd[s].toFixed(1)),
+      dm: p.dashCdMul, sx: Math.round(p.spawnX), sy: Math.round(p.spawnY),
+    };
+    msg.E = enemies.filter(e => !e.dead && (e.kind === 'boss' || near(e.x, e.y, 1500))).map(encEnemy);
+    msg.B = bullets.filter(b => near(b.x, b.y, 1100)).map(b => [Math.round(b.x), Math.round(b.y), Math.round(b.vx), Math.round(b.vy), b.type, Math.round(b.r), +b.life.toFixed(2)]);
+    msg.Q = ebullets.filter(b => near(b.x, b.y, 1100)).map(b => [Math.round(b.x), Math.round(b.y), Math.round(b.vx), Math.round(b.vy), Math.round(b.r), ci(b.color)]);
+    msg.H = hazards.filter(h => near(h.x, h.y, 1300)).map(h => [Math.round(h.x), Math.round(h.y), Math.round(h.r), +h.t.toFixed(2), +(h.delay || 0).toFixed(2), +(h.dur || 0).toFixed(1), h.team, ci(h.color)]);
+    msg.K = pickups.filter(k => k.type === 'shard' || near(k.x, k.y, 1300)).map(k => [k.type, Math.round(k.x), Math.round(k.y)]);
+    msg.cols = cols;
+    msg.EV = evs.filter(e => e[1] === null || near(e[1], e[2], 1600)).concat(Net.targeted[r.pid] || []);
+    Net.targeted[r.pid] = [];
+    r.conn.send(msg);
+  }
+}
+// 방장의 탭이 잠깐 가려져도(다른 창을 봐도) 게임이 멈추지 않게 하는 보조 타이머
+let bgWorker = null, bgLast = 0;
+function ensureBgTicker() {
+  if (bgWorker) return;
+  try {
+    bgWorker = new Worker(URL.createObjectURL(new Blob(['setInterval(() => postMessage(0), 33)'], { type: 'text/javascript' })));
+    bgWorker.onmessage = () => {
+      if (!document.hidden || Net.mode !== 'host') { bgLast = performance.now(); return; }
+      const now = performance.now(), dt = Math.min(0.05, (now - bgLast) / 1000);
+      bgLast = now;
+      try {
+        if (state === 'lobby') hostLobbyTick(dt);
+        else { if (state !== 'win') update(dt); hostSend(dt); }
+      } catch (err) { console.error(err); }
+    };
+  } catch (e) { bgWorker = null; }
+}
+
+// ---------- 친구(참가자) ----------
+function clientJoin(code) {
+  netLeave();
+  Net.ui = 'join'; Net.status = '방 「' + code + '」에 연결하는 중…';
+  updateNetUI();
+  netOpenJoin(code, w => {
+    Net.mode = 'client'; Net.host = w; Net.code = code;
+    w.onData = clientOnData;
+    w.onClose = clientOnHostLost;
+    Net.status = '연결됐어요! 방장이 시작할 때까지 기다려 주세요.';
+    updateNetUI();
+  }, err => {
+    const msg = NET_ERR[err] || '방에 들어갈 수 없어요 (' + err + ')';
+    netLeave(); Net.ui = 'join'; Net.status = msg; updateNetUI();
+  });
+}
+function clientOnHostLost() {
+  if (Net.mode !== 'client') return;
+  const inGame = state !== 'lobby';
+  netLeave(); Net.ui = 'join';
+  Net.status = '방장과 연결이 끊겼어요.';
+  if (inGame) {
+    backToLobby();
+    showOverlay(cardHead('📡 연결이 끊겼어요') + '<p>방장과의 연결이 끊어졌어요.</p><p class="soft">방장이 게임 창을 닫았거나 인터넷이 끊겼을 수 있어요.</p><button class="btn go" id="okBtn">확인</button>');
+    el('okBtn').onclick = () => el('overlay').classList.remove('on');
+  }
+  updateNetUI();
+}
+function clientOnData(d) {
+  if (!d || typeof d !== 'object') return;
+  if (d.t === 'welcome') {
+    Net.myId = d.pid; Net.code = d.code;
+    say('spark', '방 「' + d.code + '」에 들어왔어! 방장이 시작할 때까지 로비에서 친구들과 놀고 있자.');
+    sfx('gift');
+    updateNetUI();
+  } else if (d.t === 'full') {
+    netLeave(); Net.ui = 'join'; Net.status = d.reason; updateNetUI();
+    say('spark', d.reason);
+  } else if (d.t === 'roster') {
+    for (const r of d.list) {
+      const old = Net.roster.find(o => o.pid === r.pid);
+      if (old) { r.dfx = old.dfx; r.dfy = old.dfy; }
+    }
+    Net.roster = d.list; updateNetUI();
+  } else if (d.t === 'start') {
+    el('overlay').classList.remove('on');
+    startGame(d);
+    Net.lastSnap = performance.now();
+  } else if (d.t === 's') {
+    if (state !== 'lobby') clientSnap(d);
+  } else if (d.t === 'lobby') {
+    Net.lastSnap = 0;
+    backToLobby();
+  }
+}
+function clientLobbyTick(dt) {
+  Net.lobT -= dt;
+  if (Net.lobT > 0 || !Net.host) return;
+  Net.lobT = 0.1;
+  const area = VW > 760 ? VW - 404 : VW;
+  Net.host.send({ t: 'lob', name: (el('nameInput').value || LOOKS[selectedLook].name).slice(0, 8), look: selectedLook, fx: +(lobbyElf.x / area).toFixed(3), fy: +(lobbyElf.y / VH).toFixed(3), face: lobbyElf.face, walk: +lobbyElf.walk.toFixed(2), moving: !!lobbyElf.moving });
+}
+function clientSnap(d) {
+  Net.lastSnap = performance.now();
+  runTime = d.rt; teamShards = d.sh; shake = Math.max(shake, (d.sk || 0) * 0.6);
+  if (d.fs && !finalStarted) barrierBreak = 1.2;
+  finalStarted = !!d.fs;
+  for (const k in bossDefeated) delete bossDefeated[k];
+  for (const id of d.bd) bossDefeated[id] = true;
+  // 플레이어
+  const seen = new Set();
+  for (const a of d.P) {
+    const [id, x, y, aim, dead, hp, maxHp, level, moving, inv, look, name, walk, wtype] = a;
+    let q = players.find(p => p.id === id);
+    if (!q) { q = makePlayer(id, clamp(look, 0, LOOKS.length - 1), name); q.x = x; q.y = y; players.push(q); }
+    seen.add(q);
+    if (q === local) continue;
+    q.tx = x; q.ty = y; q.aim = aim; q.dead = !!dead; q.hp = hp; q.maxHp = maxHp; q.level = level;
+    q.moving = !!moving; q.invuln = inv ? 0.1 : 0; q.walk = walk; q.face = Math.cos(aim) >= 0 ? 1 : -1; q.showW = wtype;
+  }
+  players = players.filter(p => seen.has(p) || p === local);
+  const m = d.me;
+  if (m && local) {
+    if ((m.tp || 0) !== (local.tpSeq || 0)) { local.tpSeq = m.tp; local.x = m.x; local.y = m.y; local.vx = local.vy = 0; }
+    Object.assign(local, { hp: m.hp, maxHp: m.maxHp, xp: m.xp, xpNext: m.xpNext, level: m.level, kills: m.kills, deaths: m.deaths, dead: !!m.dead, respawnT: m.rt, slowT: m.slow, dashCdMul: m.dm, spawnX: m.sx, spawnY: m.sy });
+    local.invuln = Math.max(local.invuln, m.inv);
+    local.weapons = m.w.map(([type, lvl]) => ({ type, lvl }));
+    if (local.wIdx >= local.weapons.length) local.wIdx = 0;
+    for (const s of SKILL_ORDER) local.skills[s] = m.sk.includes(s);
+    SKILL_ORDER.forEach((s, i) => { if (s !== 'dash') local.cd[s] = m.cd[i]; });
+  }
+  // 적 (부드럽게 움직이도록 목표 위치만 바꿈)
+  const ents = new Map(enemies.map(e => [e.uid, e])), next = [];
+  for (const a of d.E) {
+    const [uid, type, x, y, z, hp, maxHp, r, fl] = a;
+    let e = ents.get(uid);
+    if (!e) {
+      const T = ETYPES[type];
+      e = T ? { kind: fl & 1 ? 'elite' : 'mob', type, uid, x, y, seed: Math.random() * 10, color: T.color, eye: T.eye, name: (fl & 1 ? '정예 ' : '') + T.name, alpha: 1 }
+            : { kind: 'boss', id: type, type, uid, x, y, seed: Math.random() * 10, homeX: x, homeY: y };
+    }
+    e.tx = x; e.ty = y; e.z = z; e.hp = hp; e.maxHp = maxHp; e.r = r;
+    e.burrowed = !!(fl & 2); e.slowT = fl & 4 ? 1 : 0; if (fl & 8) e.flash = 0.08; e.fuse = fl & 16 ? 0.3 : 0;
+    e.cstate = fl & 32 ? 'wind' : ''; e.awake = !!(fl & 64); e.enr = !!(fl & 128);
+    if (e.kind === 'boss') { [e.state, e.ang, e.face, e.phase, e.t, e.name] = a.slice(9); if (e.id === 'lord') finalBoss = e; }
+    else if (e.cstate === 'wind') e.cang = a[9];
+    next.push(e);
+  }
+  enemies = next;
+  bullets = d.B.map(([x, y, vx, vy, type, r, life]) => ({ x, y, vx, vy, type, r, life, a: Math.atan2(vy, vx), color: (WEAPONS[type] || {}).color || '#7dffa8', spin: Math.random() * 6 }));
+  ebullets = d.Q.map(([x, y, vx, vy, r, c]) => ({ x, y, vx, vy, r, color: d.cols[c] }));
+  hazards = d.H.map(([x, y, r, t, delay, dur, team, c]) => ({ x, y, r, t, delay, dur, team, color: d.cols[c] }));
+  pickups = d.K.map(([type, x, y]) => ({ type, x, y, t: 0 }));
+  scrolls = d.S.map(([x, y, skill]) => ({ x, y, skill, taken: false }));
+  allies = d.A.map(([type, x, y, a, t]) => ({ type, x, y, a, t, r: 95, walk: gtime }));
+  turrets = d.T.map(([x, y, aim, t]) => ({ x, y, aim, t }));
+  if (d.G) gifts = d.G.map(([x, y, opened, rich]) => ({ x, y, opened: !!opened, rich: !!rich }));
+  for (const e of d.EV) { try { playEvent(e); } catch (err) { /* 알 수 없는 이벤트는 무시 */ } }
+  if (d.st === 'ending' && state === 'play') { startEnding(); endingT = d.et; }
+}
+function clientSkill(s) {
+  if (!local || local.dead) return;
+  if (!local.skills[s]) { useSkill(local, s); return; }        // 잠긴 스킬 안내
+  if (local.cd[s] > 0) return;
+  let tx, ty;
+  if (s === 'meteor') {
+    tx = mouse.x + cam.x; ty = mouse.y + cam.y;
+    if (autoAim) { const t = nearestEnemy(local.x, local.y, 600); if (t) { tx = t.x; ty = t.y; } else { tx = local.x + Math.cos(local.aim) * 250; ty = local.y + Math.sin(local.aim) * 250; } }
+  }
+  if (s === 'dash') useSkill(local, 'dash');                    // 대시는 내 화면에서 바로 움직임
+  else local.cd[s] = SKILLS[s].cd;
+  Net.host.send({ t: 'sk', s, aim: +local.aim.toFixed(3), ix: local.ix, iy: local.iy, tx: tx === undefined ? undefined : Math.round(tx), ty: ty === undefined ? undefined : Math.round(ty) });
+}
+function clientUpdate(dt) {
+  if (Net.lastSnap && performance.now() - Net.lastSnap > 8000) { clientOnHostLost(); return; }   // 8초 동안 소식이 없으면 끊긴 것
+  gtime += dt;
+  if (state === 'play') runTime += dt;
+  barrierMsgT -= dt;
+  if (local) updatePlayer(local, dt);
+  const k = Math.min(1, dt * 12);
+  for (const q of players) {
+    if (q === local || q.tx === undefined) continue;
+    if (Math.hypot(q.tx - q.x, q.ty - q.y) > 400) { q.x = q.tx; q.y = q.ty; } else { q.x = lerp(q.x, q.tx, k); q.y = lerp(q.y, q.ty, k); }
+  }
+  for (const e of enemies) {
+    if (e.tx !== undefined) { if (Math.hypot(e.tx - e.x, e.ty - e.y) > 500) { e.x = e.tx; e.y = e.ty; } else { e.x = lerp(e.x, e.tx, k); e.y = lerp(e.y, e.ty, k); } }
+    e.flash = Math.max(0, (e.flash || 0) - dt);
+    const T = ETYPES[e.type];
+    if (T && T.blink) e.alpha = 0.55 + Math.sin(gtime * 5 + e.seed) * 0.25;
+    if (e.kind === 'boss') e.t = (e.t || 0) + dt;
+  }
+  for (const b of bullets) {
+    b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
+    if (b.type === 'bell') b.r += 95 * dt;
+    if (b.type === 'wreath') b.spin += dt * 16;
+    if ((b.type === 'star' || b.type === 'ornament') && !fxLow) glowPuff(b.x, b.y, b.color, b.r * 1.2, 0.18);
+  }
+  for (const b of ebullets) { b.x += b.vx * dt; b.y += b.vy * dt; }
+  for (const h of hazards) h.t += dt;
+  for (const a of allies) {
+    a.t -= dt;
+    if (a.type === 'rudolph') { a.x += Math.cos(a.a) * 950 * dt; a.y += Math.sin(a.a) * 950 * dt; a.walk += dt; }
+  }
+  Net.inT -= dt;
+  if (Net.inT <= 0 && local && Net.host && state === 'play') {
+    Net.inT = 1 / 20;
+    Net.host.send({ t: 'in', x: Math.round(local.x), y: Math.round(local.y), aim: +local.aim.toFixed(3), fire: !!local.wantFire, w: local.wIdx, ix: local.ix || 0, iy: local.iy || 0, mv: local.moving ? 1 : 0, wk: +local.walk.toFixed(2), tp: local.tpSeq || 0 });
+  }
+  updateCosmetics(dt);
+  if (state === 'ending') {
+    endingT += dt;
+    treeLight = Math.min(1, endingT / 4);
+    updateCinematic(dt);
+    if (endingT > CINE_END && state !== 'win') showWin();
+  }
+  updateCamera(dt);
+}
+
+// ---------- 로비 화면의 멀티 버튼 ----------
+function updateNetUI() {
+  const n = Net.mode === 'solo' ? 1 : Math.max(1, Net.roster.length);
+  el('playerCount').textContent = n;
+  document.querySelectorAll('#slotDots .dot').forEach((d, i) => d.classList.toggle('on', i < n));
+  el('modeSolo').classList.toggle('on', Net.ui === 'solo');
+  el('modeHost').classList.toggle('on', Net.ui === 'host');
+  el('modeJoin').classList.toggle('on', Net.ui === 'join');
+  el('netPanel').style.display = Net.ui === 'solo' ? 'none' : '';
+  el('hostInfo').style.display = Net.ui === 'host' && Net.mode === 'host' ? '' : 'none';
+  el('joinInfo').style.display = Net.ui === 'join' && Net.mode !== 'client' ? '' : 'none';
+  el('roomCode').textContent = Net.code || '-----';
+  el('netStatus').textContent = Net.status + (Net.mode === 'client' ? ' (방 ' + Net.code + ' · ' + n + '명)' : '');
+  const sb = el('startBtn');
+  sb.disabled = Net.mode === 'client';
+  sb.textContent = Net.mode === 'client' ? '방장을 기다리는 중…' : Net.mode === 'host' ? '함께 시작 ▶ (' + n + '명)' : '게임 시작 ▶';
+}
+function setupNetUI() {
+  addEventListener('pagehide', () => { if (Net.mode !== 'solo') netLeave(); });   // 창을 닫으면 친구들에게 알려요
+  el('modeSolo').onclick = () => { sfx('click'); netLeave(); Net.ui = 'solo'; Net.status = ''; updateNetUI(); };
+  el('modeHost').onclick = () => { audioInit(); sfx('click'); if (Net.mode !== 'host') hostCreate(); ensureBgTicker(); };
+  el('modeJoin').onclick = () => { audioInit(); sfx('click'); if (Net.mode === 'host') netLeave(); Net.ui = 'join'; if (Net.mode !== 'client') Net.status = '방장에게 받은 코드 5자리를 넣어 주세요.'; updateNetUI(); el('codeInput').focus(); };
+  el('joinBtn').onclick = () => {
+    audioInit(); sfx('click');
+    const code = el('codeInput').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (code.length !== 5) { Net.status = '코드는 5자리예요!'; updateNetUI(); return; }
+    clientJoin(code);
+  };
+  el('codeInput').addEventListener('keydown', e => { if (e.code === 'Enter') el('joinBtn').click(); });
+  el('copyCode').onclick = () => {
+    try { navigator.clipboard.writeText(Net.code); toast('📋 코드를 복사했어요: ' + Net.code, '#7dffa8'); } catch (e) { toast('코드: ' + Net.code, '#7dffa8'); }
+  };
+  updateNetUI();
+}
+
 // =====================================================================
 //  그리기 — 캐릭터
 // =====================================================================
@@ -2752,7 +3355,7 @@ function drawPlayer(p) {
   }
   const blink = p.invuln > 0 && p.dashT <= 0 && Math.floor(gtime * 20) % 2 === 0;
   // 무기
-  const w = WEAPONS[p.weapons[p.wIdx].type];
+  const w = WEAPONS[p.showW] || WEAPONS[(p.weapons[p.wIdx] || p.weapons[0]).type] || WEAPONS.cane;
   ctx.save(); ctx.translate(p.x, p.y - 2); ctx.rotate(p.aim);
   ctx.fillStyle = '#333'; rr(ctx, 6, -3, 20, 6, 3); ctx.fill();
   ctx.fillStyle = w.color; rr(ctx, 8, -2, 18, 4, 2); ctx.fill();
@@ -2790,7 +3393,7 @@ function drawSlime(e) {
   const g = c.createRadialGradient(-r * 0.3, -r * 0.4, r * 0.1, 0, 0, r * 1.2);
   const fuseBlink = e.fuse && Math.floor(gtime * 18) % 2 === 0;
   g.addColorStop(0, e.flash > 0 || fuseBlink ? '#ffffff' : lighten(e.color));
-  g.addColorStop(1, e.flash > 0 ? '#ffd6e0' : fuseBlink ? '#ff7b3c' : e.color);
+  g.addColorStop(1, e.flash > 0 ? '#ffd6e0' : fuseBlink ? '#ff7b3c' : (e.color || '#2b1d4a'));
   c.fillStyle = g;
   const rx = r * (1 + wob), ry = r * (1 - wob);
   c.beginPath();
@@ -2912,6 +3515,7 @@ function drawZaps(c) {
 }
 const lightCache = {};
 function lighten(hex) {
+  if (typeof hex !== 'string' || hex[0] !== '#') return '#9a8ab8';
   if (lightCache[hex]) return lightCache[hex];
   const n = parseInt(hex.slice(1), 16);
   const f = v => Math.min(255, Math.round(v * 1.9 + 30));
@@ -3908,19 +4512,20 @@ function buildLobby() {
   if (savedName) el('nameInput').value = savedName;
   const best = parseFloat(store('elf_best'));
   el('best').textContent = isNaN(best) ? '🏆 최고 기록: 아직 없음' : '🏆 최고 기록: ' + fmtTime(best);
-  el('startBtn').onclick = () => { audioInit(); sfx('click'); startGame(); };
+  el('startBtn').onclick = () => { if (Net.mode === 'client') return; audioInit(); sfx('click'); startGame(); };
+  setupNetUI();
   el('musicBtn').onclick = () => { audioInit(); setMusic(!Snd.musicOn); };
   el('sfxBtn').onclick = () => { audioInit(); setSfx(!Snd.sfxOn); sfx('click'); };
   updateSoundButtons();
   addEventListener('pointerdown', audioInit);
   addLights(el('lobby'), 14);
   addLights(el('storyBox'), 24);
-  lobbyElf.x = (VW - 404) / 2 - 140; lobbyElf.y = VH * 0.72;
+  lobbyElf.x = (VW - 404) / 2 - 140 + rand(-120, 120); lobbyElf.y = VH * 0.72 + rand(-20, 20);
   say('narr', '아주 먼 북쪽, 일 년 내내 눈이 내리는 「스노우벨 마을」이 있었어요.');
   say('narr', '마을 한가운데엔 거대한 크리스마스 트리가 서 있었죠. 트리의 빛은 모두를 늘 행복하고 안전하게 지켜 주었어요.');
   say('narr', '엘프들의 임무는 단 하나 — 빛을 끄려는 「어둠」으로부터 트리를 지키는 것이었어요.');
   say('narr', '그런데 어느 겨울밤, 어둠의 군주 녹스가 트리의 빛을 깨뜨려 버렸어요! 엄청난 폭발과 함께 엘프들은 세계 곳곳으로 흩어지고 말았죠…');
-  say('spark', '엘프를 골라 이름을 정하고 [게임 시작]을 눌러 줘! WASD나 방향키로 미리 움직여 볼 수도 있어. (지금은 혼자, 나중엔 최대 21명이 함께!)');
+  say('spark', '엘프를 골라 이름을 정하고 [게임 시작]을 눌러 줘! 친구들과 하고 싶으면 [🏠 방 만들기]로 방을 열고 코드를 알려 줘. 최대 21명까지 함께할 수 있어!');
   renderObjectives();
 }
 function selectLook(i) {
@@ -4044,14 +4649,24 @@ function drawLobby(dt) {
   gift(tx + 60, tyy + 2, 38, 30, UI.red); gift(tx + 100, tyy + 12, 28, 22, '#3f6b45'); gift(tx - 105, tyy + 6, 42, 28, '#c9a66b');
   inkText(c, '빛을 잃은 트리…', tx, tyy + 62, FONT(18), 'center', UI.cream, '#3a2a1f');
   // 21개 자리
-  for (let i = 1; i < MAX_PLAYERS; i++) {
+  const inRoom = Net.mode === 'solo' ? 1 : Math.max(1, Net.roster.length);
+  for (let i = inRoom; i < MAX_PLAYERS; i++) {
     const a = i / MAX_PLAYERS * Math.PI * 2 + Math.PI / 2;
     const sx = tx + Math.cos(a) * (rw - 60), sy = ry + Math.sin(a) * (rh - 34);
     c.strokeStyle = 'rgba(58,42,31,0.45)'; c.lineWidth = 2; c.setLineDash([4, 4]);
     c.beginPath(); c.ellipse(sx, sy + 14, 16, 6, 0, 0, Math.PI * 2); c.stroke(); c.setLineDash([]);
     drawElf(c, sx, sy, LOOKS[i % LOOKS.length], 1, 0, false, 0.8, 0.16);
   }
-  inkText(c, '빈 자리 20개 — 나중에 친구들이 여기 모여요!', tx, ry + rh + 26, FONT(17), 'center', UI.paper, '#2a1d14');
+  inkText(c, Net.mode === 'solo' ? '빈 자리 20개 — [방 만들기]로 친구들을 불러 봐요!' : '함께하는 엘프 ' + inRoom + '명 · 빈 자리 ' + (MAX_PLAYERS - inRoom) + '개', tx, ry + rh + 26, FONT(17), 'center', UI.paper, '#2a1d14');
+  // 같은 방 친구들의 엘프
+  for (const r of Net.roster) {
+    if (r.pid === (Net.mode === 'host' ? 0 : Net.myId)) continue;
+    r.dfx = r.dfx === undefined ? r.fx : lerp(r.dfx, r.fx, 0.2);
+    r.dfy = r.dfy === undefined ? r.fy : lerp(r.dfy, r.fy, 0.2);
+    const ox = r.dfx * area, oy = r.dfy * VH;
+    drawElf(c, ox, oy, LOOKS[r.look] || LOOKS[0], r.face || 1, r.walk || 0, r.moving, 1.6);
+    inkText(c, r.name, ox, oy - 62, FONT(19), 'center', UI.ink, UI.cream);
+  }
   drawElf(c, lobbyElf.x, lobbyElf.y, LOOKS[selectedLook], lobbyElf.face, lobbyElf.walk, lobbyElf.moving, 1.6);
   const nm = (el('nameInput').value || LOOKS[selectedLook].name);
   inkText(c, nm, lobbyElf.x, lobbyElf.y - 62, FONT(19), 'center', UI.ink, UI.cream);
@@ -4092,21 +4707,30 @@ function showWin() {
     (isBest ? '<p class="good">🏆 새로운 최고 기록!</p>' : '<p>🏆 최고 기록: ' + fmtTime(prev) + '</p>') +
     '<p>🧝 ' + local.name + ' · Lv.' + local.level + ' · 👾 ' + local.kills + '마리 · 💫 ' + local.deaths + '번 쓰러짐</p>' +
     '<p class="soft">매일매일이 크리스마스가 되었어요! 🎅</p>' +
-    '<button class="btn go" id="againBtn">다시 하기</button><button class="btn" id="lobbyBtn">로비로</button>');
+    (Net.mode === 'client'
+      ? '<p class="soft">방장이 다시 시작하거나 로비로 돌아갈 때까지 기다려 주세요.</p><button class="btn" id="leaveBtn">방 나가기</button>'
+      : Net.mode === 'host'
+        ? '<button class="btn go" id="againBtn">모두 다시 하기</button><button class="btn" id="lobbyBtn">모두 로비로</button>'
+        : '<button class="btn go" id="againBtn">다시 하기</button><button class="btn" id="lobbyBtn">로비로</button>'));
+  if (Net.mode === 'client') {
+    el('leaveBtn').onclick = () => { netLeave(); Net.ui = 'solo'; Net.status = ''; backToLobby(); };
+    return;
+  }
   el('againBtn').onclick = () => { el('overlay').classList.remove('on'); startGame(); };
-  el('lobbyBtn').onclick = backToLobby;
+  el('lobbyBtn').onclick = () => { if (Net.mode === 'host') hostBroadcast({ t: 'lobby' }); backToLobby(); };
 }
 
 function backToLobby() {
   el('overlay').classList.remove('on');
   paused = false; state = 'lobby'; players = []; local = null;
-  enemies = []; bullets = []; ebullets = []; hazards = [];
+  enemies = []; bullets = []; ebullets = []; hazards = []; allies = []; turrets = []; pickups = []; scrolls = [];
   el('lobby').style.display = '';
   const best = parseFloat(store('elf_best'));
   el('best').textContent = isNaN(best) ? '🏆 최고 기록: 아직 없음' : '🏆 최고 기록: ' + fmtTime(best);
   story.queue = []; story.cur = null;
-  say('spark', '다시 모험을 떠날 준비가 되면 [게임 시작]을 눌러 줘!');
+  say('spark', Net.mode === 'client' ? '로비로 돌아왔어! 방장이 다시 시작할 때까지 기다리자.' : '다시 모험을 떠날 준비가 되면 [게임 시작]을 눌러 줘!');
   renderObjectives();
+  updateNetUI();
 }
 
 // =====================================================================
@@ -4132,8 +4756,12 @@ function frameBody(dt) {
   if (state === 'lobby') {
     updateLobby(dt);
     drawLobby(dt);
+    if (Net.mode === 'host') hostLobbyTick(dt);
+    else if (Net.mode === 'client') clientLobbyTick(dt);
   } else {
-    if (!paused && state !== 'win') update(dt);
+    if (Net.mode === 'client') clientUpdate(dt);
+    else if (!paused && state !== 'win') update(dt);
+    if (Net.mode === 'host') hostSend(dt);
     ctx.fillStyle = '#0b1020'; ctx.fillRect(0, 0, VW, VH);
     drawWorld();
     drawSnow(paused ? 0 : dt, 0.7);
