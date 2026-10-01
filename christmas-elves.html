@@ -9,6 +9,9 @@
 <style>
   /* ===== 손그림 크리스마스 일러스트 스타일 ===== */
   :root {
+    --sal: env(safe-area-inset-left, 0px);
+    --sar: env(safe-area-inset-right, 0px);
+    --sab: env(safe-area-inset-bottom, 0px);
     --paper: #f3e5cc;
     --paper-2: #e8d4b2;
     --cream: #fffaf0;
@@ -81,7 +84,7 @@
 
   /* ===== 로비 패널 ===== */
   #lobby {
-    position: fixed; top: 16px; right: 16px; width: 372px; bottom: 214px;
+    position: fixed; top: 16px; right: calc(16px + var(--sar)); width: 372px; bottom: 214px;
     display: flex; flex-direction: column;
   }
   .lobbyHead { border-radius: 15px 10px 0 0 / 10px 17px 0 0; padding: 20px 16px 10px; text-align: center; }
@@ -143,8 +146,8 @@
 
   /* ===== 하단 스토리 박스 ===== */
   #storyBox {
-    position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%);
-    width: min(980px, calc(100vw - 24px));
+    position: fixed; left: 50%; bottom: calc(12px + var(--sab)); transform: translateX(-50%);
+    width: min(980px, calc(100vw - 24px - var(--sal) - var(--sar)));
   }
   #storyTabs { display: flex; gap: 6px; padding: 14px 12px 0; align-items: flex-end; border-bottom: 2px solid var(--ink); }
   .tab {
@@ -248,6 +251,40 @@
     #storyText { font-size: 18px; }
     #startBtn { font-size: 26px; }
   }
+  /* 세로로 들었을 때 안내 */
+  #rotateHint { position: fixed; inset: 0; z-index: 30; display: none; align-items: center; justify-content: center; background: linear-gradient(180deg, #120d12, #2b1e18); text-align: center; padding: 24px; }
+  #rotateHint.on { display: flex; }
+  #rotateHint .neon { font-size: 40px; margin: 18px 0 6px; }
+  #rotateHint .small { color: var(--paper-2); font-size: 18px; margin: 0; }
+  #rotateHint .phone { width: 60px; height: 100px; margin: 0 auto; border: 4px solid var(--paper); border-radius: 12px; box-shadow: 0 0 18px #ffb347; animation: rotPhone 2s ease-in-out infinite; }
+  @keyframes rotPhone { 0%, 30% { transform: rotate(0deg); } 60%, 100% { transform: rotate(-90deg); } }
+  /* 가로 휴대폰 (낮은 화면) 용 촘촘한 배치 */
+  @media (max-height: 500px) {
+    #lobby { top: 8px; width: 430px; }
+    .lobbyHead { padding: 8px 10px 4px; display: flex; align-items: baseline; justify-content: center; gap: 10px; }
+    .lobbyHead .mc { font-size: 18px; }
+    #lobby h1 { font-size: 26px; margin: 0; }
+    #lobby .label { margin: 5px 0 3px; font-size: 15px; }
+    #nameInput { font-size: 17px; padding: 1px 10px; }
+    #charGrid { gap: 3px; }
+    .charBtn canvas { max-width: 28px; }
+    #charInfo { margin-top: 4px; padding: 2px 8px; font-size: 15px; }
+    #slotDots { display: none; }
+    .lobbyFoot { padding: 0 12px 6px; }
+    .lobbyFoot .modeRow { margin-top: 4px; }
+    .modeBtn { padding: 2px; font-size: 14px; }
+    #startBtn { margin-top: 5px; font-size: 24px; }
+    #best { display: none; }
+    .netPanel { margin-top: 4px; padding: 4px 8px; font-size: 15px; }
+    .netPanel b#roomCode { font-size: 26px; }
+    #storyTabs { padding: 10px 8px 0; gap: 4px; }
+    .tab, .sndBtn, #toggleStory, #storyTicker { font-size: 14px; }
+    .card { max-height: calc(100vh - 16px); overflow-y: auto; }
+    .card h2 { font-size: 34px; }
+    .card .big { font-size: 48px; }
+    .card p { font-size: 17px; margin: 3px 12px; }
+    .card button { margin-top: 8px; font-size: 24px; }
+  }
   @media (prefers-reduced-motion: reduce) { .bulb, .night::before, #storyTicker.pulse { animation: none; } }
 </style>
 </head>
@@ -340,6 +377,7 @@
 </div>
 
 <div id="overlay"><div class="card paper" id="overlayCard"></div></div>
+<div id="rotateHint"><div class="rotBox"><div class="phone"></div><p class="neon">휴대폰을 가로로 돌려 주세요</p><p class="small">세로 화면은 너무 좁아서 게임이 잠깐 멈춰요</p></div></div>
 
 <script>
 'use strict';
@@ -790,6 +828,7 @@ function updateStory(dt) {
     const p = document.createElement('p');
     p.innerHTML = '<b>' + w.n + ':</b> ' + story.cur.text;
     el('paneLog').appendChild(p);
+    while (el('paneLog').childElementCount > 150) el('paneLog').firstElementChild.remove();   // 기록이 너무 길어지지 않게
     el('paneLog').scrollTop = 1e9;
     const tab = document.querySelector('.tab[data-pane="paneStory"]');
     if (!tab.classList.contains('on')) tab.classList.add('new');
@@ -2509,7 +2548,7 @@ function toast(text, color) {
   if (text.startsWith('⚠')) sfx('alert');
   if (toasts.length && toasts[toasts.length - 1].text === text) { toasts[toasts.length - 1].t = 0; return; }
   toasts.push({ text, color, t: 0 });
-  if (toasts.length > 4) toasts.shift();
+  while (toasts.length > (touchUI.enabled ? 2 : 4)) toasts.shift();   // 휴대폰에서는 알림 2개까지
 }
 
 
@@ -3334,35 +3373,85 @@ function setupNetUI() {
 
 
 // =====================================================================
-//  모바일 터치 조작
-//  · 왼쪽 화면: 누르고 끌면 이동 조이스틱
-//  · 오른쪽 화면: 누르고 끌면 그 방향으로 조준·발사 (안 누르면 자동 조준으로 쏴요)
-//  · 스킬·무기·일시정지는 화면의 버튼을 톡!
+//  모바일 터치 조작 (가로 화면 기준)
+//  · 왼쪽 아래: 이동 조이스틱 (그 구역에서만 움직여요)
+//  · 오른쪽 아래: 대시·스킬·무기 바꾸기 버튼 (버튼이 언제나 먼저예요)
+//  · 그 밖의 오른쪽 화면: 끌면 그 방향으로 조준 (안 끌면 자동 조준)
 // =====================================================================
 const IS_TOUCH = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
-const touchUI = { enabled: false, move: null, aim: null, mx: 0, my: 0, moveActive: false, aimActive: false, aimHeld: false, aimAngle: 0, zones: [], hinted: false };
-let hudS = 1;
-function touchZone(x, y, w, h, fn) { touchUI.zones.push({ x, y, w, h, fn }); }
+// 휴대폰·태블릿처럼 손가락이 주된 입력인 기기 (터치 노트북은 마우스가 기본이라 제외)
+const IS_PHONE = IS_TOUCH && !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
+const touchUI = { enabled: false, move: null, aim: null, mx: 0, my: 0, moveActive: false, aimActive: false, aimHeld: false, aimAngle: 0, zones: [], cluster: null, stickC: null };
+const SAFE = { l: 0, r: 0, b: 0 };
+let hudS = 1, rotateBlocked = false;
+function readSafeArea() {
+  try {
+    const cs = getComputedStyle(document.documentElement);
+    SAFE.l = parseFloat(cs.getPropertyValue('--sal')) || 0;
+    SAFE.r = parseFloat(cs.getPropertyValue('--sar')) || 0;
+    SAFE.b = parseFloat(cs.getPropertyValue('--sab')) || 0;
+  } catch (e) { /* 지원하지 않는 브라우저 */ }
+}
+function touchZone(x, y, w, h, fn, pad = 8) { touchUI.zones.push({ x: x - pad, y: y - pad, w: w + pad * 2, h: h + pad * 2, fn }); }
 function pressSkill(s) {
   if (!local || state !== 'play' || paused || local.dead) return;
   if (Net.mode === 'client') clientSkill(s); else useSkill(local, s);
 }
+function cycleWeapon() {
+  if (!local || local.weapons.length < 2) { toast('🎁 선물상자에서 새 무기를 찾아봐요!', '#ffd166'); return; }
+  local.wIdx = (local.wIdx + 1) % local.weapons.length;
+  const w = WEAPONS[local.weapons[local.wIdx].type];
+  toast(w.icon + ' ' + w.name, '#ffd166');
+  sfx('click');
+}
 function hudScale() {
   if (!touchUI.enabled && VW >= 1000 && VH >= 640) return 1;
-  return clamp(Math.min(VW / 1000, VH / 640), 0.55, 1);
+  return clamp(Math.min(VW / 1000, VH / 640), touchUI.enabled ? 0.6 : 0.55, 1);
 }
 function enableTouch() {
   if (touchUI.enabled) return;
   touchUI.enabled = true;
   autoAim = true;                      // 손가락으로 할 땐 자동 조준이 기본
+  document.body.classList.add('touch');
   autoStoryLayout();
 }
+// 마우스나 키보드를 쓰면 다시 컴퓨터 화면으로
+function disableTouch() {
+  if (!touchUI.enabled) return;
+  touchUI.enabled = false;
+  touchUI.move = touchUI.aim = null; recalcTouch();
+  document.body.classList.remove('touch');
+  autoStoryLayout();
+}
+cvs.addEventListener('mousemove', e => { if (touchUI.enabled && (Math.abs(e.movementX) + Math.abs(e.movementY)) > 2) disableTouch(); });
+addEventListener('keydown', e => { if (touchUI.enabled && e.code !== 'Enter' && document.activeElement.tagName !== 'INPUT') disableTouch(); });
+// 전체 화면 + 가로 고정 (안드로이드 크롬 등 되는 곳에서만, 안 되면 조용히 넘어가요)
+function tryLandscape() {
+  if (!touchUI.enabled) return;
+  try {
+    const de = document.documentElement, fs = de.requestFullscreen || de.webkitRequestFullscreen;
+    if (fs && !document.fullscreenElement) {
+      const r = fs.call(de);
+      if (r && r.then) r.then(() => { try { screen.orientation.lock('landscape').catch(() => {}); } catch (e) { /* 미지원 */ } }).catch(() => {});
+    }
+  } catch (e) { /* 미지원 */ }
+}
+function checkRotate() {
+  rotateBlocked = (IS_PHONE || touchUI.enabled) && VH > VW * 1.05;
+  el('rotateHint').classList.toggle('on', rotateBlocked);
+}
+function canvasPoint(t) {
+  const r = cvs.getBoundingClientRect();
+  return { x: t.clientX - r.left, y: t.clientY - r.top };
+}
+function inBox(b, x, y) { return b && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h; }
 function recalcTouch() {
   const R = 55, m = touchUI.move;
   if (m) {
     let dx = m.x - m.ox, dy = m.y - m.oy;
     const d = Math.hypot(dx, dy);
-    if (d > R) { m.ox = m.x - dx / d * R; m.oy = m.y - dy / d * R; dx = m.x - m.ox; dy = m.y - m.oy; }   // 조이스틱이 손가락을 따라와요
+    if (d > R) { dx = dx / d * R; dy = dy / d * R; }
+    m.kx = m.ox + dx; m.ky = m.oy + dy;
     touchUI.mx = dx / R; touchUI.my = dy / R;
     touchUI.moveActive = Math.hypot(dx, dy) / R > 0.15;
   } else { touchUI.moveActive = false; touchUI.mx = touchUI.my = 0; }
@@ -3376,33 +3465,43 @@ function recalcTouch() {
 }
 cvs.addEventListener('touchstart', e => {
   audioInit(); enableTouch();
+  e.preventDefault();
+  if (rotateBlocked) return;
   for (const t of e.changedTouches) {
-    const x = t.clientX, y = t.clientY;
-    const z = touchUI.zones.find(z => x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h);
+    const { x, y } = canvasPoint(t);
+    // 1) 버튼이 언제나 먼저
+    const z = touchUI.zones.find(z => inBox(z, x, y));
     if (z) { z.fn(); continue; }
     if (state === 'lobby') { lobbyElf.tx = x; lobbyElf.ty = y; continue; }
     if (state !== 'play' || paused) continue;
-    if (x < VW / 2) { if (!touchUI.move) touchUI.move = { id: t.identifier, ox: x, oy: y, x, y }; }
-    else if (!touchUI.aim) touchUI.aim = { id: t.identifier, ox: x, oy: y, x, y };
-  }
-  if (!touchUI.hinted && state === 'play') {
-    touchUI.hinted = true;
-    if (VH > VW) toast('📱 휴대폰을 가로로 돌리면 더 넓게 보여요!', '#9fd3ff');
+    // 2) 왼쪽 아래 구역: 이동 조이스틱
+    const sc = touchUI.stickC;
+    if (x < VW * 0.45 && y > VH * 0.3) {
+      if (!touchUI.move) {
+        const near = sc && dist(x, y, sc.x, sc.y) < 150;
+        touchUI.move = { id: t.identifier, ox: near ? sc.x : x, oy: near ? sc.y : y, x, y };
+      }
+      continue;
+    }
+    // 3) 스킬 버튼 묶음 근처는 무시 (헛누름 방지), 나머지 오른쪽은 조준
+    if (inBox(touchUI.cluster, x, y)) continue;
+    if (x >= VW * 0.45 && !touchUI.aim) touchUI.aim = { id: t.identifier, ox: x, oy: y, x, y };
   }
   recalcTouch();
-  e.preventDefault();
 }, { passive: false });
 cvs.addEventListener('touchmove', e => {
+  e.preventDefault();
   for (const t of e.changedTouches) {
-    for (const k of ['move', 'aim']) { const s = touchUI[k]; if (s && s.id === t.identifier) { s.x = t.clientX; s.y = t.clientY; } }
-    if (state === 'lobby') { lobbyElf.tx = t.clientX; lobbyElf.ty = t.clientY; }
+    const { x, y } = canvasPoint(t);
+    for (const k of ['move', 'aim']) { const s = touchUI[k]; if (s && s.id === t.identifier) { s.x = x; s.y = y; } }
+    if (state === 'lobby') { lobbyElf.tx = x; lobbyElf.ty = y; }
   }
   recalcTouch();
-  e.preventDefault();
 }, { passive: false });
 const touchEnd = e => {
   for (const t of e.changedTouches) for (const k of ['move', 'aim']) if (touchUI[k] && touchUI[k].id === t.identifier) touchUI[k] = null;
   recalcTouch();
+  audioInit();                          // iOS는 손을 뗄 때 소리가 켜지는 경우가 있어요
 };
 cvs.addEventListener('touchend', touchEnd);
 cvs.addEventListener('touchcancel', touchEnd);
@@ -3417,75 +3516,67 @@ function touchButton(x, y, r, icon, opt = {}) {
   c.strokeStyle = opt.on ? UI.red : UI.ink; c.lineWidth = opt.on ? 3 : 2.2; circle(c, x, y, r); c.stroke();
   c.font = Math.round(r * 0.95) + 'px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
   c.globalAlpha = opt.locked ? 0.35 : 1; c.fillStyle = UI.ink; c.fillText(opt.locked ? '🔒' : icon, x, y + 1); c.globalAlpha = 1;
+  c.textBaseline = 'alphabetic';
   if (opt.cd > 0 && opt.max) {
     c.fillStyle = 'rgba(58,42,31,0.55)';
     c.beginPath(); c.moveTo(x, y); c.arc(x, y, r - 1, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, opt.cd / opt.max)); c.closePath(); c.fill();
-    c.textBaseline = 'alphabetic';
     inkText(c, opt.cd.toFixed(opt.cd < 1 ? 1 : 0), x, y + 7, FONT(Math.round(r * 0.75)), 'center');
   }
-  c.textBaseline = 'alphabetic';
+  if (opt.badge) {
+    c.font = FONT(13); const bw = c.measureText(opt.badge).width + 10;
+    c.fillStyle = UI.red; rr(c, x - bw / 2, y + r - 8, bw, 15, 6); c.fill();
+    c.strokeStyle = UI.ink; c.lineWidth = 1.2; c.stroke();
+    c.fillStyle = UI.cream; c.textAlign = 'center'; c.fillText(opt.badge, x, y + r + 3);
+  }
   c.restore();
 }
 function drawTouchControls() {
   const p = local, c = ctx;
   if (!p) return;
-  const boxTop = el('storyBox').getBoundingClientRect().top;
-  // 무기 줄 (왼쪽 위, 상태창 아래)
-  const WS = 40, narrow = VW / hudS < 860;
-  let x = 12, y = narrow ? 300 * hudS : 120 * hudS + 8;      // 좁은 화면에서는 타이머·지도 아래로
-  WEAPON_ORDER.forEach(t => {
-    const w = p.weapons.find(q => q.type === t), on = w && p.weapons[p.wIdx] === w;
-    paperPanel(c, x, y, WS, WS, 8, on ? '#ffe9c2' : w ? UI.paper : UI.paper2);
-    if (on) { c.strokeStyle = UI.red; c.lineWidth = 3; rr(c, x - 2, y - 2, WS + 4, WS + 4, 10); c.stroke(); }
-    c.font = '20px sans-serif'; c.textAlign = 'center'; c.globalAlpha = w ? 1 : 0.25; c.fillText(WEAPONS[t].icon, x + WS / 2, y + WS * 0.68); c.globalAlpha = 1;
-    if (w) touchZone(x - 2, y - 2, WS + 4, WS + 4, () => { p.wIdx = p.weapons.indexOf(w); sfx('click'); });
-    x += WS + 5;
-  });
-  // ⏸ 일시정지 · 🎯 조준 바꾸기
-  const by = y + WS + 30;
-  touchButton(32, by, 20, '⏸');
-  touchZone(8, by - 24, 48, 48, () => onKeyPress('Escape'));
-  touchButton(80, by, 20, '🎯', { on: autoAim });
-  touchZone(56, by - 24, 48, 48, () => onKeyPress('KeyT'));
-  // 스킬 (오른쪽 아래 엄지 자리)
-  const cx0 = VW - 56, cy0 = boxTop - 58;
+  const boxTop = el('storyBox').getBoundingClientRect().top - cvs.getBoundingClientRect().top;
+  const L = SAFE.l + 12, Rr = VW - SAFE.r - 12;
+  // ⏸ 일시정지 · 🎯 조준 바꾸기 (상태창 아래)
+  const by = 120 * hudS + 28;
+  touchButton(L + 22, by, 21, '⏸');
+  touchZone(L, by - 22, 44, 44, () => onKeyPress('Escape'));
+  touchButton(L + 74, by, 21, '🎯', { on: autoAim });
+  touchZone(L + 52, by - 22, 44, 44, () => onKeyPress('KeyT'));
+  // 오른쪽 아래: 대시 + 스킬 + 무기 바꾸기
+  const cx0 = Rr - 44, cy0 = boxTop - 50, G = 58;
   const draw = (s, bx, by2, r) => {
     const has = p.skills[s], max = s === 'dash' ? SKILLS.dash.cd * p.dashCdMul : SKILLS[s].cd;
     touchButton(bx, by2, r, SKILLS[s].icon, { locked: !has, cd: has ? p.cd[s] : 0, max, glow: has && p.cd[s] <= 0 });
-    touchZone(bx - r - 4, by2 - r - 4, (r + 4) * 2, (r + 4) * 2, () => pressSkill(s));
+    touchZone(bx - r, by2 - r, r * 2, r * 2, () => pressSkill(s), 6);
   };
-  draw('dash', cx0, cy0, 34);
-  const topLimit = (narrow ? 300 * hudS + WS + 60 : (22 + 186 + 7 + 80) * hudS);   // 지도·목표 표시를 가리지 않게
-  if (cy0 - 156 - 30 > topLimit) {
-    // 세로처럼 높은 화면: 대시를 둘러싼 반원 두 줄
-    ['nova', 'turret', 'meteor'].forEach((s, i) => { const a = Math.PI + i / 2 * Math.PI / 2; draw(s, cx0 + Math.cos(a) * 92, cy0 + Math.sin(a) * 92, 25); });
-    ['chain', 'tornado', 'heal', 'rudolph'].forEach((s, i) => { const a = Math.PI + i / 3 * Math.PI / 2; draw(s, cx0 + Math.cos(a) * 156, cy0 + Math.sin(a) * 156, 25); });
-  } else {
-    // 가로처럼 낮은 화면: 대시 왼쪽으로 두 줄
-    ['nova', 'turret', 'meteor', 'chain'].forEach((s, i) => draw(s, cx0 - 74 - i * 57, cy0 + 8, 25));
-    ['tornado', 'heal', 'rudolph'].forEach((s, i) => draw(s, cx0 - 102 - i * 57, cy0 - 50, 25));
+  draw('dash', cx0, cy0, 36);
+  ['nova', 'turret', 'meteor', 'chain'].forEach((s, i) => draw(s, cx0 - 84 - i * G, cy0 + 10, 26));
+  ['tornado', 'heal', 'rudolph'].forEach((s, i) => draw(s, cx0 - 84 - i * G, cy0 - 50, 26));
+  const wcur = p.weapons[p.wIdx] || p.weapons[0];
+  const wx = cx0 - 84 - 3 * G, wy = cy0 - 50;                 // 무기 바꾸기: 위 줄 맨 왼쪽
+  touchButton(wx, wy, 26, WEAPONS[wcur.type].icon, { badge: (p.wIdx + 1) + '/' + p.weapons.length, on: true });
+  touchZone(wx - 26, wy - 26, 52, 52, cycleWeapon, 6);
+  touchUI.cluster = { x: wx - 40, y: cy0 - 90, w: (cx0 + 44) - (wx - 40), h: 140 };
+  // 왼쪽 아래: 이동 조이스틱 (가만히 있을 때도 자리를 보여 줘요)
+  const sc = touchUI.stickC = { x: L + 82, y: boxTop - 82 };
+  const m = touchUI.move;
+  const bx = m ? m.ox : sc.x, byy = m ? m.oy : sc.y, kx = m ? m.kx : sc.x, ky = m ? m.ky : sc.y;
+  c.save();
+  c.globalAlpha = m ? 0.55 : 0.32; c.fillStyle = UI.paper; circle(c, bx, byy, 55); c.fill();
+  c.globalAlpha = m ? 0.9 : 0.5; c.strokeStyle = UI.ink; c.lineWidth = 2.5; circle(c, bx, byy, 55); c.stroke();
+  c.fillStyle = UI.green; circle(c, kx, ky, 24); c.fill(); c.stroke();
+  c.restore();
+  if (touchUI.aim) {
+    const a = touchUI.aim;
+    c.save(); c.globalAlpha = 0.45; c.strokeStyle = UI.red; c.lineWidth = 3; circle(c, a.ox, a.oy, 40); c.stroke();
+    c.globalAlpha = 0.8; c.fillStyle = UI.red; circle(c, a.x, a.y, 16); c.fill(); c.restore();
   }
-  // 조이스틱
-  const stick = (s, col) => {
-    c.save();
-    c.globalAlpha = 0.5; c.fillStyle = UI.paper; circle(c, s.ox, s.oy, 55); c.fill();
-    c.globalAlpha = 0.9; c.strokeStyle = UI.ink; c.lineWidth = 2.5; circle(c, s.ox, s.oy, 55); c.stroke();
-    c.fillStyle = col; circle(c, s.x, s.y, 24); c.fill(); c.stroke();
-    c.restore();
-  };
-  if (touchUI.move) stick(touchUI.move, UI.green);
-  else {
-    c.save(); c.globalAlpha = 0.28; c.strokeStyle = UI.cream; c.lineWidth = 3; c.setLineDash([8, 8]);
-    circle(c, 90, boxTop - 90, 50); c.stroke(); c.setLineDash([]);
-    c.globalAlpha = 0.6; inkText(c, '여기를 끌어서 이동', 90, boxTop - 86, FONT(15), 'center', UI.ink, UI.cream);
-    c.restore();
-  }
-  if (touchUI.aim) stick(touchUI.aim, UI.red);
 }
 
 // 작은 화면에서는 이야기 박스를 한 줄 알림 띠로 접어요 (누르면 펼쳐져요)
 let storyUserToggled = false;
 function autoStoryLayout() {
+  readSafeArea();
+  checkRotate();
   if (storyUserToggled) return;
   const small = VH < 560 || VW < 640 || (touchUI.enabled && VH < 700);
   const b = el('storyBox');
@@ -3493,10 +3584,11 @@ function autoStoryLayout() {
 }
 function layoutLobby() {
   const top = el('storyBox').getBoundingClientRect().top;
-  const want = Math.max(12, Math.round(VH - top + 12)) + 'px';
+  const want = Math.max(12, Math.round(innerHeight - top + 10)) + 'px';
   if (el('lobby').style.bottom !== want) el('lobby').style.bottom = want;
 }
 addEventListener('resize', autoStoryLayout);
+addEventListener('orientationchange', () => setTimeout(() => { resize(); autoStoryLayout(); }, 300));
 
 // =====================================================================
 //  그리기 — 캐릭터
@@ -4643,7 +4735,7 @@ function drawHUDInner() {
   const gw = c.measureText(goal.text).width + 26;
   paperPanel(c, VW - gw - 18, my + m + 18, gw, 30, 12);
   c.fillStyle = UI.ink; c.fillText(goal.text, VW - 31, my + m + 39);
-  inkText(c, touchUI.enabled ? (autoAim ? '🎯 자동 조준 켜짐' : '✋ 오른쪽을 끌어서 조준') : autoAim ? '🎯 자동 조준 ON (T)' : '🖱 마우스 조준 (T: 자동)', VW - 22, my + m + 70, FONT(16), 'right', autoAim ? UI.green : UI.soft);
+  if (!touchUI.enabled) inkText(c, autoAim ? '🎯 자동 조준 ON (T)' : '🖱 마우스 조준 (T: 자동)', VW - 22, my + m + 70, FONT(16), 'right', autoAim ? UI.green : UI.soft);
   // 목표 방향 화살표
   if (goal.x !== undefined) {
     const sx = goal.x - cam.x, sy = goal.y - cam.y;
@@ -4754,7 +4846,7 @@ function buildLobby() {
   if (savedName) el('nameInput').value = savedName;
   const best = parseFloat(store('elf_best'));
   el('best').textContent = isNaN(best) ? '🏆 최고 기록: 아직 없음' : '🏆 최고 기록: ' + fmtTime(best);
-  el('startBtn').onclick = () => { if (Net.mode === 'client') return; audioInit(); sfx('click'); startGame(); };
+  el('startBtn').onclick = () => { if (Net.mode === 'client') return; audioInit(); sfx('click'); tryLandscape(); startGame(); };
   setupNetUI();
   el('musicBtn').onclick = () => { audioInit(); setMusic(!Snd.musicOn); };
   el('sfxBtn').onclick = () => { audioInit(); setSfx(!Snd.sfxOn); sfx('click'); };
@@ -5011,7 +5103,7 @@ function frameBody(dt) {
     else if (Net.mode === 'client') clientLobbyTick(dt);
   } else {
     if (Net.mode === 'client') clientUpdate(dt);
-    else if (!paused && state !== 'win') update(dt);
+    else if (!paused && state !== 'win' && !(rotateBlocked && Net.mode === 'solo')) update(dt);
     if (Net.mode === 'host') hostSend(dt);
     ctx.fillStyle = '#0b1020'; ctx.fillRect(0, 0, VW, VH);
     drawWorld();
@@ -5025,7 +5117,7 @@ function frameBody(dt) {
   }
 }
 buildLobby();
-if (IS_TOUCH) enableTouch(); else autoStoryLayout();
+if (IS_PHONE) enableTouch(); else autoStoryLayout();
 requestAnimationFrame(frame);
 </script>
 </body>
