@@ -5,135 +5,198 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>엘프의 크리스마스: 빛을 되찾아라</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Gamja+Flower&family=Nanum+Pen+Script&family=Caveat:wght@600&display=swap" rel="stylesheet">
 <style>
+  /* ===== 손그림 크리스마스 일러스트 스타일 ===== */
   :root {
-    --gold: #ffd166;
-    --red: #e63946;
-    --green: #2e9e4f;
-    --panel: rgba(14, 20, 44, 0.9);
-    --text: #f4f7ff;
+    --paper: #f3e5cc;
+    --paper-2: #e8d4b2;
+    --cream: #fffaf0;
+    --ink: #3a2a1f;
+    --ink-soft: #6e5644;
+    --red: #b23a2e;
+    --red-dark: #7a241c;
+    --green: #3f6b45;
+    --green-dark: #284a2e;
+    --glow: #ffd88a;
+    --night: #1d1612;
+    --knit: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='16'%3E%3Crect width='24' height='16' fill='%23b23a2e'/%3E%3Cpath d='M0 9 L6 4 L12 9 L18 4 L24 9' stroke='%23f3e5cc' stroke-width='2' fill='none'/%3E%3Ccircle cx='6' cy='12.5' r='1.3' fill='%23f3e5cc'/%3E%3Ccircle cx='18' cy='12.5' r='1.3' fill='%23f3e5cc'/%3E%3Ccircle cx='12' cy='1.8' r='1' fill='%23f3e5cc'/%3E%3Ccircle cx='0' cy='1.8' r='1' fill='%23f3e5cc'/%3E%3Ccircle cx='24' cy='1.8' r='1' fill='%23f3e5cc'/%3E%3C/svg%3E");
   }
   * { box-sizing: border-box; }
   html, body {
     margin: 0; padding: 0; overflow: hidden;
-    background: #0b1020; color: var(--text);
-    font-family: 'Jua', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+    background: var(--night); color: var(--ink);
+    font-family: 'Gamja Flower', 'Nanum Pen Script', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+    font-weight: 400;
     user-select: none;
   }
   canvas#game { display: block; cursor: crosshair; }
 
+  /* 종이 패널 */
+  .paper {
+    background-color: var(--paper);
+    background-image:
+      radial-gradient(rgba(110, 70, 30, 0.09) 1px, transparent 1.4px),
+      radial-gradient(rgba(110, 70, 30, 0.06) 1px, transparent 1.4px);
+    background-size: 7px 7px, 11px 11px;
+    background-position: 0 0, 3px 5px;
+    border: 2.5px solid var(--ink);
+    border-radius: 18px 13px 20px 12px / 12px 20px 13px 18px;
+    box-shadow: 5px 6px 0 rgba(20, 10, 5, 0.45), inset 0 0 30px rgba(140, 90, 40, 0.18);
+  }
+  /* 꼬마전구 줄 */
+  .lights { position: absolute; left: 14px; right: 14px; top: -10px; height: 22px; pointer-events: none; z-index: 2; }
+  .lights svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .bulb {
+    position: absolute; top: 11px; width: 8px; height: 9px; margin-left: -4px; border-radius: 50%;
+    background: #fff3c4;
+    box-shadow: 0 0 6px 3px rgba(255, 200, 90, 0.85), 0 0 16px 7px rgba(255, 170, 60, 0.35);
+    animation: twinkle 2.4s ease-in-out infinite;
+  }
+  @keyframes twinkle { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+  /* 니트 무늬 띠 */
+  .knit { height: 16px; background: var(--knit) repeat-x; background-size: 24px 16px; border-top: 2px solid var(--ink); border-bottom: 2px solid var(--ink); flex: none; }
+  .knit.thin { height: 11px; background-size: 17px 11px; border-bottom: none; border-radius: 0 0 16px 16px; }
+  /* 빛나는 손글씨 */
+  .mc {
+    font-family: 'Caveat', cursive; font-size: 30px; line-height: 1; color: var(--cream);
+    text-shadow: 0 0 5px #ffd88a, 0 0 14px #ffb347, 0 0 28px rgba(255, 170, 60, 0.7);
+  }
+  .neon {
+    font-family: 'Nanum Pen Script', cursive; font-weight: 400; color: var(--cream);
+    text-shadow: 0 0 5px #ffd88a, 0 0 16px #ffb347, 0 0 30px rgba(255, 160, 50, 0.6);
+  }
+  .night {
+    position: relative; overflow: hidden;
+    background: linear-gradient(180deg, #120d12, #2b1e18);
+  }
+  .night::before {
+    content: ''; position: absolute; inset: 0; opacity: 0.55;
+    background-image: radial-gradient(#fff 1px, transparent 1.6px), radial-gradient(rgba(255,255,255,0.7) 1px, transparent 1.6px);
+    background-size: 37px 41px, 23px 29px; background-position: 0 0, 11px 7px;
+    animation: snowfall 9s linear infinite;
+  }
+  .night > * { position: relative; }
+  @keyframes snowfall { to { background-position: 4px 41px, 7px 29px; } }
+
   /* ===== 로비 패널 ===== */
   #lobby {
-    position: fixed; top: 14px; right: 14px; width: 360px;
-    bottom: 200px; overflow-y: auto;
-    background: var(--panel); border: 3px solid var(--gold); border-radius: 18px;
-    padding: 16px 18px; box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    position: fixed; top: 16px; right: 16px; width: 372px; bottom: 214px;
+    display: flex; flex-direction: column;
   }
-  #lobby h1 { margin: 0; font-size: 25px; color: var(--gold); text-shadow: 0 2px 0 #8a1c25; }
-  #lobby .sub { margin: 0 0 4px; color: #9fd3ff; font-size: 15px; }
-  #lobby .label { margin: 9px 0 5px; font-size: 15px; color: #cfe3ff; }
+  .lobbyHead { border-radius: 15px 10px 0 0 / 10px 17px 0 0; padding: 20px 16px 10px; text-align: center; }
+  #lobby h1 { margin: 2px 0 0; font-size: 46px; line-height: 1; }
+  #lobby .sub { color: var(--paper-2); font-size: 17px; margin-top: 4px; }
+  .lobbyBody { flex: 1; overflow-y: auto; padding: 4px 16px 14px; }
+  #lobby .label { margin: 9px 0 5px; font-size: 18px; color: var(--ink); }
   #nameInput {
-    width: 100%; padding: 8px 12px; font: inherit; font-size: 17px;
-    border-radius: 10px; border: 2px solid #4a5a8a; background: #111a35; color: #fff; outline: none;
+    width: 100%; padding: 4px 12px; font: inherit; font-size: 21px;
+    border-radius: 12px 8px 13px 7px / 7px 13px 8px 12px; border: 2px solid var(--ink);
+    background: var(--cream); color: var(--ink); outline: none;
   }
-  #nameInput:focus { border-color: var(--gold); }
-  #charGrid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+  #nameInput:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba(178, 58, 46, 0.25); }
+  #charGrid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
   .charBtn {
-    background: #18244a; border: 2px solid #2c3b6e; border-radius: 10px; padding: 2px;
-    cursor: pointer; display: flex; justify-content: center; align-items: center; min-width: 0;
+    background: var(--cream); border: 2px solid var(--ink-soft); padding: 2px; min-width: 0;
+    border-radius: 10px 7px 11px 6px / 7px 11px 6px 10px;
+    cursor: pointer; display: flex; justify-content: center; align-items: center;
+    transition: transform 0.12s;
   }
-  .charBtn:hover { border-color: #9fd3ff; }
-  .charBtn.sel { border-color: var(--gold); background: #2b3a6e; box-shadow: 0 0 10px var(--gold); }
+  .charBtn:nth-child(odd):hover { transform: rotate(-4deg) scale(1.06); }
+  .charBtn:nth-child(even):hover { transform: rotate(4deg) scale(1.06); }
+  .charBtn.sel { border-color: var(--red); background: #ffe9c2; box-shadow: 0 0 0 2px var(--red), 0 0 14px rgba(255, 190, 80, 0.9); }
   .charBtn canvas { width: 100%; max-width: 38px; height: auto; }
   #charInfo {
-    margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: #111a35; font-size: 15px; line-height: 1.5;
+    margin-top: 8px; padding: 5px 10px; font-size: 18px; line-height: 1.4;
+    border: 2px dashed var(--ink-soft); border-radius: 10px; background: rgba(255, 250, 240, 0.6);
   }
-  #charInfo b { color: var(--gold); }
+  #charInfo b { color: var(--red); }
   #slotDots { display: grid; grid-template-columns: repeat(11, 1fr); gap: 4px; margin-top: 6px; }
-  .dot { height: 11px; border-radius: 50%; background: #26315a; border: 1px dashed #4a5a8a; }
-  .dot.on { background: var(--green); border: 1px solid #b7ffcb; box-shadow: 0 0 6px #3ddc97; }
+  .dot { height: 11px; border-radius: 50%; background: var(--paper-2); border: 1.5px dashed var(--ink-soft); }
+  .dot.on { background: #fff3c4; border: 1.5px solid var(--ink); box-shadow: 0 0 6px 3px rgba(255, 190, 80, 0.9); }
   .modeRow { display: flex; gap: 6px; margin-top: 10px; }
   .modeBtn {
-    flex: 1; padding: 8px; border-radius: 10px; font: inherit; font-size: 14px; cursor: pointer;
-    background: #18244a; color: #fff; border: 2px solid #2c3b6e;
+    flex: 1; padding: 4px; font: inherit; font-size: 17px; cursor: pointer;
+    background: var(--cream); color: var(--ink); border: 2px solid var(--ink-soft);
+    border-radius: 11px 8px 12px 7px / 7px 12px 8px 11px;
   }
-  .modeBtn.on { border-color: var(--gold); background: #2b3a6e; }
+  .modeBtn.on { border-color: var(--green-dark); background: #dfe8cf; }
   .modeBtn:disabled { opacity: 0.5; cursor: not-allowed; }
-  #startBtn {
-    width: 100%; margin-top: 10px; padding: 10px; font: inherit; font-size: 22px; cursor: pointer;
-    border: none; border-radius: 14px; color: #fff;
-    background: linear-gradient(180deg, #ff5a67, #c1272d); box-shadow: 0 5px 0 #7a1219;
+  .btn, #startBtn {
+    font-family: 'Nanum Pen Script', cursive; font-weight: 400; cursor: pointer; color: var(--cream);
+    background: var(--red); border: 2.5px solid var(--ink);
+    border-radius: 14px 10px 15px 9px / 9px 15px 10px 14px; box-shadow: 3px 4px 0 var(--ink);
+    transition: transform 0.08s;
   }
-  #startBtn:hover { filter: brightness(1.1); }
-  #startBtn:active { transform: translateY(3px); box-shadow: 0 2px 0 #7a1219; }
-  #best { margin-top: 8px; text-align: center; color: #9fd3ff; font-size: 15px; }
+  .btn:hover, #startBtn:hover { background: #c4473a; }
+  .btn:active, #startBtn:active { transform: translate(2px, 3px); box-shadow: 1px 1px 0 var(--ink); }
+  .lobbyFoot { flex: none; padding: 8px 16px 10px; border-top: 2px dashed var(--ink-soft); }
+  #startBtn { width: 100%; padding: 0; font-size: 36px; }
+  #best { margin-top: 4px; text-align: center; color: var(--ink-soft); font-size: 17px; }
 
   /* ===== 하단 스토리 박스 ===== */
   #storyBox {
     position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%);
     width: min(980px, calc(100vw - 24px));
-    background: var(--panel); border: 3px solid var(--gold); border-radius: 16px;
-    box-shadow: 0 8px 30px rgba(0,0,0,0.5);
   }
-  #storyTabs { display: flex; gap: 4px; padding: 6px 8px 0; align-items: center; }
+  #storyTabs { display: flex; gap: 6px; padding: 14px 12px 0; align-items: flex-end; border-bottom: 2px solid var(--ink); }
   .tab {
-    padding: 4px 12px; border-radius: 10px 10px 0 0; cursor: pointer; font: inherit; font-size: 14px;
-    background: #18244a; color: #cfe3ff; border: 2px solid #2c3b6e; border-bottom: none;
+    padding: 1px 14px 0; cursor: pointer; font: inherit; font-size: 18px; margin-bottom: -2px;
+    background: var(--paper-2); color: var(--ink-soft); border: 2px solid var(--ink); border-bottom: none;
+    border-radius: 12px 9px 0 0 / 9px 12px 0 0;
   }
-  .tab.on { background: #2b3a6e; color: var(--gold); border-color: var(--gold); }
-  .tab.new::after { content: ' ●'; color: #ff5a67; }
+  .tab.on { background: var(--red); color: var(--cream); }
+  .tab.new::after { content: ' ●'; color: #e9a93a; }
   #toggleStory {
-    margin-left: auto; font: inherit; font-size: 13px; padding: 3px 10px; cursor: pointer;
-    background: transparent; color: #cfe3ff; border: 1px solid #4a5a8a; border-radius: 8px;
+    margin-left: auto; margin-bottom: 5px; font: inherit; font-size: 15px; padding: 0 10px; cursor: pointer;
+    background: transparent; color: var(--ink-soft); border: 1.5px dashed var(--ink-soft); border-radius: 8px;
   }
-  #storyBody { height: 128px; padding: 10px 14px; border-top: 2px solid #2c3b6e; overflow-y: auto; }
+  #storyBody { height: 122px; padding: 10px 16px; overflow-y: auto; }
   #storyBox.collapsed #storyBody { display: none; }
   .pane { display: none; }
   .pane.on { display: block; }
-  #paneStory .row { display: flex; gap: 14px; align-items: flex-start; }
+  #paneStory .row { display: flex; gap: 16px; align-items: flex-start; }
   #portrait {
-    flex: none; width: 70px; height: 70px; border-radius: 50%;
-    background: radial-gradient(circle at 40% 35%, #3b4f8f, #141c3a);
-    border: 3px solid var(--gold); display: flex; justify-content: center; align-items: center; font-size: 38px;
+    flex: none; width: 72px; height: 72px; margin: 4px 0 0 4px; border-radius: 50%;
+    background: radial-gradient(circle at 40% 35%, var(--cream), var(--paper-2));
+    border: 2.5px solid var(--ink); box-shadow: 0 0 0 4px var(--paper), 0 0 0 6.5px var(--red), 3px 4px 0 5px rgba(58, 42, 31, 0.35);
+    display: flex; justify-content: center; align-items: center; font-size: 38px;
   }
-  #speaker { color: var(--gold); font-size: 17px; margin-bottom: 4px; }
-  #storyText { font-size: 19px; line-height: 1.45; min-height: 56px; }
+  #speaker { color: var(--red); font-size: 21px; margin-bottom: 2px; }
+  #storyText { font-size: 23px; line-height: 1.32; min-height: 56px; color: var(--ink); }
   #nextBtn {
-    float: right; font: inherit; font-size: 13px; padding: 2px 10px; cursor: pointer; margin-top: 2px;
-    background: #2b3a6e; color: #fff; border: 1px solid var(--gold); border-radius: 8px;
+    float: right; font: inherit; font-size: 16px; padding: 0 10px; cursor: pointer; margin-top: 2px;
+    background: var(--green); color: var(--cream); border: 2px solid var(--ink); border-radius: 9px 6px 10px 6px;
+    box-shadow: 2px 2px 0 var(--ink);
   }
-  .howto { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 4px 18px; font-size: 15px; line-height: 1.55; }
-  .howto b { color: var(--gold); }
+  .howto { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 2px 18px; font-size: 18px; line-height: 1.45; }
+  .howto b { color: var(--red); }
   kbd {
-    display: inline-block; padding: 0 6px; border-radius: 5px; background: #e8eefc; color: #1a2240;
-    font-family: inherit; font-size: 13px; border-bottom: 2px solid #8a96b8; margin: 0 1px;
+    display: inline-block; padding: 0 6px; border-radius: 5px; background: var(--cream); color: var(--ink);
+    font-family: inherit; font-size: 15px; border: 1.5px solid var(--ink); border-bottom-width: 3px; margin: 0 1px;
   }
-  .obj { font-size: 16px; line-height: 1.6; }
-  .obj .done { color: #7dffa8; text-decoration: line-through; opacity: 0.8; }
-  .obj .now { color: var(--gold); }
-  .log p { margin: 2px 0; font-size: 15px; }
-  .log b { color: var(--gold); }
+  .obj { font-size: 20px; line-height: 1.5; }
+  .obj .done { color: var(--green); text-decoration: line-through; opacity: 0.75; }
+  .obj .now { color: var(--red); }
+  .log p { margin: 2px 0; font-size: 18px; }
+  .log b { color: var(--red); }
 
   /* ===== 오버레이 (일시정지 / 승리) ===== */
   #overlay {
     position: fixed; inset: 0; display: none; justify-content: center; align-items: center;
-    background: rgba(5, 8, 20, 0.7); z-index: 10;
+    background: rgba(20, 12, 8, 0.6); z-index: 10;
   }
   #overlay.on { display: flex; }
-  .card {
-    width: min(520px, calc(100vw - 32px)); background: var(--panel); border: 3px solid var(--gold);
-    border-radius: 20px; padding: 24px; text-align: center;
-  }
-  .card h2 { margin: 0 0 10px; font-size: 32px; color: var(--gold); }
-  .card p { font-size: 18px; line-height: 1.6; margin: 6px 0; }
-  .card .big { font-size: 44px; color: #fff; text-shadow: 0 0 18px #ffd166; }
-  .card button {
-    margin: 12px 6px 0; padding: 10px 22px; font: inherit; font-size: 19px; cursor: pointer;
-    border: none; border-radius: 12px; color: #fff; background: linear-gradient(180deg, #3ddc97, #1b7f3b);
-    box-shadow: 0 4px 0 #0f4f24;
-  }
-  .card button.alt { background: linear-gradient(180deg, #5b6fb0, #2b3a6e); box-shadow: 0 4px 0 #18244a; }
+  .card { position: relative; width: min(540px, calc(100vw - 32px)); padding: 0 0 22px; text-align: center; }
+  .cardHead { border-radius: 15px 10px 0 0 / 10px 17px 0 0; padding: 22px 16px 10px; }
+  .card h2 { margin: 0; font-size: 50px; line-height: 1.05; }
+  .card p { font-size: 21px; line-height: 1.45; margin: 6px 16px; color: var(--ink); }
+  .card .big { font-family: 'Nanum Pen Script', cursive; font-weight: 400; font-size: 70px; color: var(--red); line-height: 1; }
+  .card .good { color: var(--green); }
+  .card .soft { color: var(--ink-soft); }
+  .card button { margin: 14px 6px 0; padding: 0 24px; font-size: 30px; }
+  .card button.go { background: var(--green); }
+  .card button.go:hover { background: #4c7c52; }
 
   @media (max-width: 760px) {
     #lobby { left: 12px; right: 12px; width: auto; }
@@ -144,30 +207,37 @@
 <canvas id="game"></canvas>
 
 <!-- 로비 -->
-<div id="lobby">
-  <h1>🎄 엘프의 크리스마스</h1>
-  <div class="sub">어둠으로부터 트리의 빛을 되찾아라!</div>
-
-  <div class="label">🧝 엘프 이름</div>
-  <input id="nameInput" maxlength="8" placeholder="이름을 입력하세요">
-
-  <div class="label">🎨 캐릭터 선택 (21명 모두 달라요!)</div>
-  <div id="charGrid"></div>
-  <div id="charInfo"></div>
-
-  <div class="label">📡 접속 인원 <b id="playerCount">1</b> / 21</div>
-  <div id="slotDots"></div>
-
-  <div class="modeRow">
-    <button class="modeBtn on">🧝 혼자 하기</button>
-    <button class="modeBtn" disabled title="다음 업데이트에서 추가돼요">👥 친구와 (준비 중)</button>
+<div id="lobby" class="paper">
+  <div class="lobbyHead night">
+    <div class="mc">Merry Christmas</div>
+    <h1 class="neon">엘프의 크리스마스</h1>
+    <div class="sub">어둠으로부터 트리의 빛을 되찾아라!</div>
   </div>
-  <button id="startBtn">게임 시작 ▶</button>
-  <div id="best"></div>
+  <div class="knit"></div>
+  <div class="lobbyBody">
+    <div class="label">🧝 엘프 이름</div>
+    <input id="nameInput" maxlength="8" placeholder="이름을 입력하세요">
+
+    <div class="label">🎨 캐릭터 선택 (21명 모두 달라요!)</div>
+    <div id="charGrid"></div>
+    <div id="charInfo"></div>
+
+    <div class="label">📡 접속 인원 <b id="playerCount">1</b> / 21</div>
+    <div id="slotDots"></div>
+
+    <div class="modeRow">
+      <button class="modeBtn on">🧝 혼자 하기</button>
+      <button class="modeBtn" disabled title="다음 업데이트에서 추가돼요">👥 친구와 (준비 중)</button>
+    </div>
+  </div>
+  <div class="lobbyFoot">
+    <button id="startBtn">게임 시작 ▶</button>
+    <div id="best"></div>
+  </div>
 </div>
 
 <!-- 하단 스토리 박스 -->
-<div id="storyBox">
+<div id="storyBox" class="paper">
   <div id="storyTabs">
     <button class="tab on" data-pane="paneStory">📖 이야기</button>
     <button class="tab" data-pane="paneGoal">🎯 목표</button>
@@ -205,9 +275,10 @@
     </div>
     <div class="pane log" id="paneLog"></div>
   </div>
+  <div class="knit thin"></div>
 </div>
 
-<div id="overlay"><div class="card" id="overlayCard"></div></div>
+<div id="overlay"><div class="card paper" id="overlayCard"></div></div>
 
 <script>
 'use strict';
@@ -279,6 +350,83 @@ function rr(c, x, y, w, h, r) {
 function circle(c, x, y, r) { c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); }
 function store(key, val) {
   try { if (val === undefined) return localStorage.getItem(key); localStorage.setItem(key, val); } catch (e) { return null; }
+}
+
+// ---------- 손그림 GUI 도구 ----------
+const UI = {
+  paper: '#f3e5cc', paper2: '#e8d4b2', cream: '#fffaf0', ink: '#3a2a1f', soft: '#6e5644',
+  red: '#b23a2e', green: '#3f6b45', gold: '#e9a93a',
+};
+const FONT = s => s + 'px "Gamja Flower", sans-serif';
+const PEN = s => s + 'px "Nanum Pen Script", "Gamja Flower", sans-serif';
+function paperPanel(c, x, y, w, h, r = 12, fill = UI.paper) {
+  c.save();
+  c.fillStyle = 'rgba(25,12,6,0.45)'; rr(c, x + 4, y + 5, w, h, r); c.fill();
+  c.fillStyle = fill; rr(c, x, y, w, h, r); c.fill();
+  c.strokeStyle = UI.ink; c.lineWidth = 2.2; c.stroke();
+  c.globalAlpha = 0.35; c.lineWidth = 1.2; rr(c, x + 1.5, y - 1, w - 2, h + 1.5, r + 2); c.stroke();
+  c.restore();
+}
+function garland(c, x, y, w, n, sag, r) {
+  c.save();
+  c.strokeStyle = '#2a1d14'; c.lineWidth = 1.4;
+  c.beginPath(); c.moveTo(x, y);
+  const seg = w / n;
+  for (let i = 0; i < n; i++) c.quadraticCurveTo(x + seg * (i + 0.5), y + sag * 2, x + seg * (i + 1), y);
+  c.stroke();
+  for (let i = 0; i < n; i++) {
+    const tw = 0.6 + 0.4 * Math.sin(gtime * 3 + i * 1.7);
+    c.shadowColor = '#ffb347'; c.shadowBlur = r * 4 * tw;
+    c.fillStyle = 'rgba(255,238,180,' + (0.55 + 0.45 * tw) + ')';
+    c.beginPath(); c.ellipse(x + seg * (i + 0.5), y + sag + r, r, r * 1.15, 0, 0, Math.PI * 2); c.fill();
+  }
+  c.restore();
+}
+function bar(c, x, y, w, h, k, col) {
+  k = clamp(k, 0, 1);
+  c.fillStyle = '#e3cfae'; rr(c, x, y, w, h, h / 2); c.fill();
+  if (k > 0) {
+    c.fillStyle = col; rr(c, x, y, Math.max(h, w * k), h, h / 2); c.fill();
+    c.fillStyle = 'rgba(255,255,255,0.28)'; rr(c, x + 3, y + 2, Math.max(0, w * k - 6), h * 0.28, h * 0.14); c.fill();
+  }
+  c.strokeStyle = UI.ink; c.lineWidth = 1.8; rr(c, x, y, w, h, h / 2); c.stroke();
+}
+function inkText(c, text, x, y, font, align = 'left', fill = UI.ink, stroke = UI.cream) {
+  c.save(); c.font = font; c.textAlign = align; c.lineJoin = 'round';
+  c.lineWidth = 4; c.strokeStyle = stroke; c.strokeText(text, x, y);
+  c.fillStyle = fill; c.fillText(text, x, y);
+  c.restore();
+}
+function neonText(c, text, x, y, font) {
+  c.save(); c.font = font; c.textAlign = 'center'; c.lineJoin = 'round';
+  c.shadowColor = '#ffb347'; c.shadowBlur = 28; c.strokeStyle = 'rgba(255,190,90,0.85)'; c.lineWidth = 5; c.strokeText(text, x, y);
+  c.shadowBlur = 12; c.fillStyle = UI.cream; c.fillText(text, x, y);
+  c.restore();
+}
+function starPath(c, x, y, R, r) {
+  c.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + i * Math.PI / 5, rad = i % 2 ? r : R;
+    c.lineTo(x + Math.cos(a) * rad, y + Math.sin(a) * rad);
+  }
+  c.closePath();
+}
+function addLights(host, n) {
+  const old = host.querySelector(':scope > .lights');
+  if (old) old.remove();
+  const w = document.createElement('div');
+  w.className = 'lights';
+  let d = 'M0 2';
+  for (let i = 0; i < n; i++) d += ' Q' + ((i + 0.5) / n * 100) + ' 20 ' + ((i + 1) / n * 100) + ' 2';
+  w.innerHTML = '<svg viewBox="0 0 100 22" preserveAspectRatio="none"><path d="' + d + '" stroke="#2a1d14" stroke-width="1.4" fill="none" vector-effect="non-scaling-stroke"/></svg>';
+  for (let i = 0; i < n; i++) {
+    const b = document.createElement('span');
+    b.className = 'bulb';
+    b.style.left = ((i + 0.5) / n * 100) + '%';
+    b.style.animationDelay = (-Math.random() * 2.4).toFixed(2) + 's';
+    w.appendChild(b);
+  }
+  host.prepend(w);
 }
 
 // ---------- 캐릭터 21종 ----------
@@ -1494,19 +1642,19 @@ function drawCinematic() {
   // 영화 같은 검은 띠
   const lb = 46 * ss(T / 1.5);
   c.fillStyle = '#000'; c.fillRect(0, 0, VW, lb); c.fillRect(0, VH - lb, VW, lb);
-  c.font = '14px Jua, sans-serif'; c.textAlign = 'right'; c.fillStyle = 'rgba(255,255,255,0.6)';
+  c.font = FONT(17); c.textAlign = 'right'; c.fillStyle = 'rgba(243,229,204,0.75)';
   if (state === 'ending') c.fillText('Esc: 건너뛰기', VW - 16, lb - 16);
   c.textAlign = 'left'; c.fillText('⏱ 클리어 ' + fmtTime(runTime), 16, lb - 16);
   // 끝
   if (T > 23) {
     const a = ss((T - 23) / 1.5);
-    c.globalAlpha = a; c.textAlign = 'center';
-    c.font = '72px Jua, sans-serif'; c.lineWidth = 6; c.strokeStyle = 'rgba(20,20,60,0.7)';
-    c.shadowColor = '#ffd166'; c.shadowBlur = 30;
-    c.strokeText('🎄 끝 🎄', VW / 2, VH * 0.22); c.fillStyle = '#fff3c4'; c.fillText('🎄 끝 🎄', VW / 2, VH * 0.22);
-    c.shadowBlur = 0; c.font = '24px Jua, sans-serif'; c.lineWidth = 4;
-    c.strokeText('매일매일이 크리스마스가 되었답니다', VW / 2, VH * 0.22 + 46);
-    c.fillStyle = '#ffffff'; c.fillText('매일매일이 크리스마스가 되었답니다', VW / 2, VH * 0.22 + 46);
+    c.globalAlpha = a;
+    const bg = c.createRadialGradient(VW / 2, VH * 0.24, 20, VW / 2, VH * 0.24, VW * 0.4);
+    bg.addColorStop(0, 'rgba(30,18,12,0.6)'); bg.addColorStop(1, 'rgba(30,18,12,0)');
+    c.fillStyle = bg; c.fillRect(0, 0, VW, VH);
+    neonText(c, 'Merry Christmas', VW / 2, VH * 0.2, '600 76px Caveat, cursive');
+    neonText(c, '— 끝 —', VW / 2, VH * 0.2 + 64, PEN(60));
+    inkText(c, '매일매일이 크리스마스가 되었답니다', VW / 2, VH * 0.2 + 104, FONT(26), 'center', UI.cream, 'rgba(30,18,12,0.85)');
   }
   c.restore();
 }
@@ -1742,7 +1890,7 @@ function drawStar(c, x, y, R, r, color) {
 function drawPlayer(p) {
   if (p.dead) {
     ctx.fillStyle = 'rgba(255,255,255,0.6)';
-    ctx.font = '16px Jua, sans-serif'; ctx.textAlign = 'center';
+    ctx.font = '16px \"Gamja Flower\", sans-serif'; ctx.textAlign = 'center';
     ctx.fillText('💫 ' + Math.ceil(p.respawnT) + '초 뒤 부활', p.x, p.y);
     return;
   }
@@ -1754,7 +1902,7 @@ function drawPlayer(p) {
   ctx.fillStyle = w.color; rr(ctx, 8, -2, 18, 4, 2); ctx.fill();
   ctx.restore();
   drawElf(ctx, p.x, p.y, p.look, p.face, p.walk, p.moving, 1.15, blink ? 0.4 : 1);
-  ctx.font = '13px Jua, sans-serif'; ctx.textAlign = 'center';
+  ctx.font = '13px \"Gamja Flower\", sans-serif'; ctx.textAlign = 'center';
   ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(10,15,40,0.8)';
   ctx.strokeText(p.name, p.x, p.y - 46);
   ctx.fillStyle = '#fff'; ctx.fillText(p.name, p.x, p.y - 46);
@@ -1802,7 +1950,7 @@ function drawSlime(e) {
   c.restore();
   if (e.hp < e.maxHp) hpBar(e.x, e.y - e.r * 1.35 - 8, Math.max(26, e.r * 1.8), e.hp / e.maxHp, e.kind === 'elite' ? '#ffb84d' : '#ff5a67');
   if (e.kind === 'elite') {
-    ctx.font = '13px Jua, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#ffd166';
+    ctx.font = '13px \"Gamja Flower\", sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#ffd166';
     ctx.fillText(e.name, e.x, e.y - e.r * 1.35 - 16);
   }
 }
@@ -1929,7 +2077,7 @@ function drawBoss(b) {
   }
   c.restore();
   if (b.awake || dist(b.x, b.y, local.x, local.y) < 900) {
-    ctx.font = '15px Jua, sans-serif'; ctx.textAlign = 'center';
+    ctx.font = '15px \"Gamja Flower\", sans-serif'; ctx.textAlign = 'center';
     ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.7)';
     const ty = b.y - b.z - r * (b.id === 'reindeer' ? 2.1 : b.id === 'witch' ? 2.5 : b.id === 'snowman' ? 2.5 : 1.9) - 10;
     ctx.strokeText('💀 ' + b.name, b.x, ty);
@@ -2118,7 +2266,7 @@ function drawWorld() {
   if (local && inView(local.spawnX, local.spawnY)) {
     c.strokeStyle = 'rgba(255,209,102,0.7)'; c.lineWidth = 3; c.setLineDash([8, 8]);
     circle(c, local.spawnX, local.spawnY, 40); c.stroke(); c.setLineDash([]);
-    c.fillStyle = 'rgba(160,120,40,0.8)'; c.font = '13px Jua, sans-serif'; c.textAlign = 'center';
+    c.fillStyle = 'rgba(160,120,40,0.8)'; c.font = '13px \"Gamja Flower\", sans-serif'; c.textAlign = 'center';
     c.fillText('시작 지점', local.spawnX, local.spawnY + 58);
   }
   for (const h of hazards) {
@@ -2185,7 +2333,7 @@ function drawWorld() {
   c.globalAlpha = 1;
   for (const f of floats) {
     c.globalAlpha = 1 - f.t / f.life;
-    c.font = f.size + 'px Jua, sans-serif'; c.textAlign = 'center';
+    c.font = f.size + 'px "Gamja Flower", sans-serif'; c.textAlign = 'center';
     c.lineWidth = 3; c.strokeStyle = 'rgba(10,10,30,0.8)'; c.strokeText(f.text, f.x, f.y);
     c.fillStyle = f.color; c.fillText(f.text, f.x, f.y);
   }
@@ -2236,131 +2384,154 @@ function drawHUD() {
   const p = local, c = ctx;
   const boxTop = el('storyBox').getBoundingClientRect().top;
   c.textBaseline = 'alphabetic';
-  // 왼쪽 위: 플레이어 상태
-  c.fillStyle = 'rgba(14,20,44,0.85)'; rr(c, 12, 12, 270, 92, 14); c.fill();
-  c.strokeStyle = '#ffd166'; c.lineWidth = 2; c.stroke();
-  drawElf(c, 42, 66, p.look, 1, 0, false, 1.25);
-  c.textAlign = 'left'; c.font = '17px Jua, sans-serif'; c.fillStyle = '#ffd166';
-  c.fillText(p.name + '  Lv.' + p.level, 74, 34);
-  c.fillStyle = '#3a1020'; rr(c, 74, 42, 196, 16, 8); c.fill();
-  c.fillStyle = p.hp / p.maxHp < 0.3 ? '#ff3b3b' : '#ff5a67'; rr(c, 74, 42, Math.max(0, 196 * p.hp / p.maxHp), 16, 8); c.fill();
-  c.fillStyle = '#fff'; c.font = '12px Jua, sans-serif'; c.textAlign = 'center';
-  c.fillText('❤ ' + Math.ceil(p.hp) + ' / ' + p.maxHp, 172, 55);
-  c.fillStyle = '#2a2a10'; rr(c, 74, 64, 196, 9, 4.5); c.fill();
-  c.fillStyle = '#ffd166'; rr(c, 74, 64, 196 * p.xp / p.xpNext, 9, 4.5); c.fill();
-  c.textAlign = 'left'; c.fillStyle = '#cfe3ff'; c.font = '13px Jua, sans-serif';
-  c.fillText('👾 ' + p.kills + '   💫 ' + p.deaths + '   ' + ZONE_NAME[zoneAt(p.x, p.y) - 1], 74, 94);
+  // 왼쪽 위: 플레이어 상태 (종이 카드 + 꼬마전구)
+  paperPanel(c, 12, 16, 280, 96, 14);
+  garland(c, 24, 16, 256, 9, 4, 3);
+  c.fillStyle = UI.cream; circle(c, 46, 66, 28); c.fill();
+  c.strokeStyle = UI.ink; c.lineWidth = 2; c.stroke();
+  c.strokeStyle = UI.red; c.lineWidth = 2; circle(c, 46, 66, 32); c.stroke();
+  c.save(); circle(c, 46, 66, 27); c.clip(); drawElf(c, 46, 78, p.look, 1, 0, false, 1.25); c.restore();
+  c.textAlign = 'left'; c.font = FONT(21); c.fillStyle = UI.ink;
+  c.fillText(p.name, 86, 41);
+  const nw = c.measureText(p.name).width;
+  c.font = FONT(17); c.fillStyle = UI.red; c.fillText(' Lv.' + p.level, 86 + nw, 41);
+  bar(c, 86, 48, 194, 16, p.hp / p.maxHp, p.hp / p.maxHp < 0.3 ? '#d9412f' : UI.red);
+  inkText(c, '❤ ' + Math.ceil(p.hp) + ' / ' + p.maxHp, 183, 61, FONT(14), 'center');
+  bar(c, 86, 69, 194, 9, p.xp / p.xpNext, UI.gold);
+  c.textAlign = 'left'; c.font = FONT(16); c.fillStyle = UI.soft;
+  c.fillText('👾 ' + p.kills + '  💫 ' + p.deaths + '  · ' + ZONE_NAME[zoneAt(p.x, p.y) - 1], 86, 100);
 
   // 위 가운데: 타이머 + 별조각
   c.textAlign = 'center';
-  c.fillStyle = 'rgba(14,20,44,0.85)'; rr(c, VW / 2 - 110, 10, 220, 64, 14); c.fill();
-  c.strokeStyle = '#ffd166'; c.stroke();
-  c.font = '28px Jua, sans-serif'; c.fillStyle = '#fff';
-  c.fillText('⏱ ' + fmtTime(runTime), VW / 2, 42);
-  for (let i = 0; i < 4; i++) drawStar(c, VW / 2 - 45 + i * 30, 60, 10, 4.2, i < teamShards ? '#ffd166' : '#3c3a50');
+  paperPanel(c, VW / 2 - 116, 16, 232, 70, 16);
+  garland(c, VW / 2 - 104, 16, 208, 7, 4, 3);
+  c.font = PEN(40); c.fillStyle = UI.ink;
+  c.fillText('⏱ ' + fmtTime(runTime), VW / 2, 58);
+  for (let i = 0; i < 4; i++) {
+    const lit = i < teamShards, sx = VW / 2 - 45 + i * 30;
+    if (lit) { c.shadowColor = '#ffb347'; c.shadowBlur = 10; }
+    drawStar(c, sx, 74, 10, 4.2, lit ? UI.gold : '#d6c2a0');
+    c.shadowBlur = 0;
+    c.strokeStyle = UI.ink; c.lineWidth = 1.2; starPath(c, sx, 74, 10, 4.2); c.stroke();
+  }
 
-  // 보스 체력바
+  // 보스 체력바 (어두운 밤하늘 카드)
   let boss = null, bd = 1e9;
   for (const e of enemies) if (e.kind === 'boss' && e.awake && !e.dead) { const d = dist(e.x, e.y, p.x, p.y); if (d < bd) { bd = d; boss = e; } }
-  let ty = 96;
+  let ty = 114;
   if (boss) {
-    const bw = Math.min(520, VW - 420);
-    c.fillStyle = 'rgba(14,20,44,0.85)'; rr(c, VW / 2 - bw / 2 - 10, 80, bw + 20, 44, 10); c.fill();
-    c.font = '15px Jua, sans-serif'; c.fillStyle = '#ffb3c1';
-    c.fillText('💀 ' + boss.name + (boss.id === 'lord' ? '  (' + boss.phase + '단계)' : boss.enr ? '  🔥분노' : ''), VW / 2, 98);
-    c.fillStyle = '#2a0a14'; rr(c, VW / 2 - bw / 2, 104, bw, 12, 6); c.fill();
+    const bw = Math.min(520, VW - 440);
+    paperPanel(c, VW / 2 - bw / 2 - 14, 96, bw + 28, 50, 12, '#2b1f1a');
+    c.font = FONT(19); c.fillStyle = UI.paper;
+    c.fillText('💀 ' + boss.name + (boss.id === 'lord' ? '  (' + boss.phase + '단계)' : boss.enr ? '  🔥분노' : ''), VW / 2, 117);
+    c.fillStyle = '#140c09'; rr(c, VW / 2 - bw / 2, 124, bw, 13, 6.5); c.fill();
     const g = c.createLinearGradient(VW / 2 - bw / 2, 0, VW / 2 + bw / 2, 0);
-    g.addColorStop(0, '#b04cff'); g.addColorStop(1, '#ff3b6b');
-    c.fillStyle = g; rr(c, VW / 2 - bw / 2, 104, Math.max(0, bw * boss.hp / boss.maxHp), 12, 6); c.fill();
-    ty = 146;
+    g.addColorStop(0, '#6b2a6e'); g.addColorStop(1, UI.red);
+    c.fillStyle = g; rr(c, VW / 2 - bw / 2, 124, Math.max(0, bw * boss.hp / boss.maxHp), 13, 6.5); c.fill();
+    c.strokeStyle = UI.paper; c.lineWidth = 1.5; rr(c, VW / 2 - bw / 2, 124, bw, 13, 6.5); c.stroke();
+    ty = 176;
   }
-  // 알림
+  // 알림 (종이 쪽지)
   for (let i = 0; i < toasts.length; i++) {
     const t = toasts[i];
     c.globalAlpha = t.t < 0.2 ? t.t / 0.2 : t.t > 3 ? (3.5 - t.t) / 0.5 : 1;
-    c.font = '18px Jua, sans-serif';
-    const w = c.measureText(t.text).width + 30;
-    c.fillStyle = 'rgba(14,20,44,0.85)'; rr(c, VW / 2 - w / 2, ty + i * 34 - 20, w, 30, 10); c.fill();
-    c.fillStyle = t.color; c.fillText(t.text, VW / 2, ty + i * 34);
+    c.font = FONT(20);
+    const w = c.measureText(t.text).width + 46, y = ty + i * 38;
+    paperPanel(c, VW / 2 - w / 2, y - 22, w, 32, 14);
+    c.fillStyle = t.color; circle(c, VW / 2 - w / 2 + 17, y - 6, 6); c.fill();
+    c.strokeStyle = UI.ink; c.lineWidth = 1.5; c.stroke();
+    c.fillStyle = UI.ink; c.textAlign = 'center'; c.fillText(t.text, VW / 2 + 9, y);
   }
   c.globalAlpha = 1;
 
-  // 오른쪽 위: 미니맵
-  const m = Math.min(190, VW * 0.22), mx = VW - m - 12, my = 12, sc = m / W;
-  c.fillStyle = 'rgba(14,20,44,0.88)'; rr(c, mx - 4, my - 4, m + 8, m + 8, 10); c.fill();
-  c.strokeStyle = '#ffd166'; c.lineWidth = 2; c.stroke();
+  // 오른쪽 위: 지도
+  const m = Math.min(186, VW * 0.22), mx = VW - m - 18, my = 22, sc = m / W;
+  paperPanel(c, mx - 7, my - 7, m + 14, m + 14, 12);
+  garland(c, mx + 2, my - 7, m - 4, 7, 4, 3);
   c.save(); rr(c, mx, my, m, m, 8); c.clip();
-  c.fillStyle = '#d8e6f5'; c.fillRect(mx, my, m, m);
-  const zc = ['rgba(150,110,210,0.25)', 'rgba(110,60,180,0.3)', 'rgba(70,20,130,0.4)'];
+  c.fillStyle = '#f7efe0'; c.fillRect(mx, my, m, m);
+  const zc = ['rgba(150,100,140,0.2)', 'rgba(110,60,110,0.26)', 'rgba(70,30,70,0.34)'];
   for (let i = 0; i < 3; i++) { c.fillStyle = zc[i]; circle(c, mx + CX * sc, my + CY * sc, ZONE_EDGE[i] * sc); c.fill(); }
-  c.font = '10px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
-  for (const g of gifts) if (!g.opened) { c.fillStyle = g.rich ? '#9d4edd' : '#e63946'; c.fillRect(mx + g.x * sc - 1.5, my + g.y * sc - 1.5, 3, 3); }
-  for (const s of scrolls) if (!s.taken) { c.fillStyle = '#7b2cbf'; c.font = 'bold 13px sans-serif'; c.fillText('✦', mx + s.x * sc, my + s.y * sc); }
-  for (const e of enemies) if (e.kind === 'elite' && !e.dead) { c.fillStyle = '#ff9a3c'; circle(c, mx + e.x * sc, my + e.y * sc, 2.5); c.fill(); }
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  for (const g of gifts) if (!g.opened) { c.fillStyle = g.rich ? '#7b3f8c' : UI.red; c.fillRect(mx + g.x * sc - 1.5, my + g.y * sc - 1.5, 3, 3); }
+  for (const s of scrolls) if (!s.taken) { c.fillStyle = '#6a3a8c'; c.font = 'bold 13px sans-serif'; c.fillText('✦', mx + s.x * sc, my + s.y * sc); }
+  for (const e of enemies) if (e.kind === 'elite' && !e.dead) { c.fillStyle = '#d9822b'; circle(c, mx + e.x * sc, my + e.y * sc, 2.5); c.fill(); }
   c.font = '13px sans-serif';
   for (const d of BOSS_DEFS) c.fillText(bossDefeated[d.id] ? '✅' : '💀', mx + d.x * sc, my + d.y * sc);
   c.font = '16px sans-serif'; c.fillText(treeLight > 0 ? '🌟' : '🎄', mx + CX * sc, my + CY * sc);
-  c.strokeStyle = 'rgba(255,255,255,0.5)'; c.lineWidth = 1; c.strokeRect(mx + cam.x * sc, my + cam.y * sc, VW * sc, VH * sc);
+  c.strokeStyle = 'rgba(58,42,31,0.45)'; c.lineWidth = 1; c.setLineDash([3, 3]);
+  c.strokeRect(mx + cam.x * sc, my + cam.y * sc, VW * sc, VH * sc); c.setLineDash([]);
   for (const q of players) {
-    c.fillStyle = q === local ? '#ffffff' : '#7dffa8'; c.strokeStyle = '#000'; c.lineWidth = 1.5;
-    circle(c, mx + q.x * sc, my + q.y * sc, 4); c.fill(); c.stroke();
+    c.fillStyle = q === local ? UI.cream : '#9bd18f'; c.strokeStyle = UI.ink; c.lineWidth = 1.8;
+    circle(c, mx + q.x * sc, my + q.y * sc, 4.5); c.fill(); c.stroke();
   }
   c.restore();
+  c.strokeStyle = UI.ink; c.lineWidth = 1.5; rr(c, mx, my, m, m, 8); c.stroke();
   c.textBaseline = 'alphabetic';
   // 다음 목표
   const goal = currentGoal();
-  c.font = '14px Jua, sans-serif'; c.textAlign = 'right';
-  const gw = c.measureText(goal.text).width + 24;
-  c.fillStyle = 'rgba(14,20,44,0.85)'; rr(c, VW - gw - 12, my + m + 12, gw, 28, 9); c.fill();
-  c.fillStyle = '#ffd166'; c.fillText(goal.text, VW - 24, my + m + 31);
-  c.fillStyle = autoAim ? '#7dffa8' : '#9fd3ff';
-  c.fillText(autoAim ? '🎯 자동 조준 ON (T)' : '🖱 마우스 조준 (T: 자동)', VW - 24, my + m + 58);
+  c.font = FONT(17); c.textAlign = 'right';
+  const gw = c.measureText(goal.text).width + 26;
+  paperPanel(c, VW - gw - 18, my + m + 18, gw, 30, 12);
+  c.fillStyle = UI.ink; c.fillText(goal.text, VW - 31, my + m + 39);
+  inkText(c, autoAim ? '🎯 자동 조준 ON (T)' : '🖱 마우스 조준 (T: 자동)', VW - 22, my + m + 70, FONT(16), 'right', autoAim ? UI.green : UI.soft);
   // 목표 방향 화살표
   if (goal.x !== undefined) {
     const sx = goal.x - cam.x, sy = goal.y - cam.y;
     if (sx < 0 || sx > VW || sy < 0 || sy > boxTop) {
       const a = Math.atan2(goal.y - p.y, goal.x - p.x);
-      const ax = clamp(VW / 2 + Math.cos(a) * VW, 40, VW - 40), ay = clamp(VH / 2 + Math.sin(a) * VH, 130, boxTop - 90);
-      c.save(); c.translate(ax, ay); c.rotate(a);
-      c.fillStyle = 'rgba(255,209,102,' + (0.7 + Math.sin(gtime * 6) * 0.3) + ')';
-      c.beginPath(); c.moveTo(22, 0); c.lineTo(-10, -14); c.lineTo(-4, 0); c.lineTo(-10, 14); c.closePath(); c.fill();
+      const ax = clamp(VW / 2 + Math.cos(a) * VW, 40, VW - 40), ay = clamp(VH / 2 + Math.sin(a) * VH, 150, boxTop - 90);
+      c.save(); c.translate(ax, ay); c.rotate(a); c.scale(1 + Math.sin(gtime * 6) * 0.08, 1 + Math.sin(gtime * 6) * 0.08);
+      c.shadowColor = '#ffb347'; c.shadowBlur = 12;
+      c.fillStyle = UI.red; c.strokeStyle = UI.ink; c.lineWidth = 2.2; c.lineJoin = 'round';
+      c.beginPath(); c.moveTo(24, 0); c.lineTo(-10, -15); c.lineTo(-3, 0); c.lineTo(-10, 15); c.closePath(); c.fill();
+      c.shadowBlur = 0; c.stroke();
       c.restore();
     }
   }
 
   // 무기 & 스킬 바 (스토리 박스 위)
-  const by = boxTop - 66;
-  let bx = 14;
+  const by = boxTop - 70;
+  let bx = 16;
   c.textAlign = 'center';
   for (let i = 0; i < WEAPON_ORDER.length; i++) {
     const t = WEAPON_ORDER[i], w = p.weapons.find(q => q.type === t), on = w && p.weapons[p.wIdx] === w;
-    c.fillStyle = on ? 'rgba(60,80,150,0.95)' : 'rgba(14,20,44,0.85)'; rr(c, bx, by, 54, 54, 10); c.fill();
-    c.strokeStyle = on ? '#ffd166' : '#2c3b6e'; c.lineWidth = on ? 3 : 2; c.stroke();
+    if (on) { c.save(); c.shadowColor = '#ffb347'; c.shadowBlur = 18; }
+    paperPanel(c, bx, by, 54, 54, 10, on ? '#ffe9c2' : w ? UI.paper : UI.paper2);
+    if (on) { c.restore(); c.strokeStyle = UI.red; c.lineWidth = 3; rr(c, bx - 2, by - 2, 58, 58, 12); c.stroke(); }
     c.font = '24px sans-serif'; c.globalAlpha = w ? 1 : 0.25; c.fillText(WEAPONS[t].icon, bx + 27, by + 34); c.globalAlpha = 1;
-    c.font = '11px Jua, sans-serif'; c.fillStyle = '#cfe3ff'; c.fillText(String(i + 1), bx + 8, by + 14);
-    if (w) { c.fillStyle = '#ffd166'; c.fillText('Lv' + w.lvl, bx + 27, by + 50); }
-    bx += 60;
+    c.font = FONT(14); c.fillStyle = UI.soft; c.fillText(String(i + 1), bx + 9, by + 15);
+    if (w) { c.fillStyle = UI.red; c.fillText('Lv' + w.lvl, bx + 27, by + 51); }
+    bx += 62;
   }
-  bx += 14;
+  bx += 12;
   for (const s of SKILL_ORDER) {
     const has = p.skills[s], cd = p.cd[s], max = s === 'dash' ? SKILLS.dash.cd * p.dashCdMul : SKILLS[s].cd;
-    c.fillStyle = 'rgba(14,20,44,0.85)'; rr(c, bx, by, 54, 54, 27); c.fill();
-    c.strokeStyle = has ? (cd > 0 ? '#4a5a8a' : '#c9b6ff') : '#2c3b6e'; c.lineWidth = 2; c.stroke();
-    c.font = '22px sans-serif'; c.globalAlpha = has ? 1 : 0.25; c.fillStyle = '#fff'; c.fillText(has ? SKILLS[s].icon : '🔒', bx + 27, by + 33); c.globalAlpha = 1;
+    const ready = has && cd <= 0;
+    if (ready) { c.save(); c.shadowColor = '#ffb347'; c.shadowBlur = 12; }
+    c.fillStyle = 'rgba(25,12,6,0.45)'; circle(c, bx + 31, by + 32, 27); c.fill();
+    c.fillStyle = has ? UI.paper : UI.paper2; circle(c, bx + 27, by + 27, 27); c.fill();
+    if (ready) c.restore();
+    c.strokeStyle = has ? UI.ink : UI.soft; c.lineWidth = 2.2; circle(c, bx + 27, by + 27, 27); c.stroke();
+    if (ready) { c.strokeStyle = UI.green; c.lineWidth = 2; circle(c, bx + 27, by + 27, 23); c.stroke(); }
+    c.font = '22px sans-serif'; c.globalAlpha = has ? 1 : 0.3; c.fillStyle = UI.ink; c.fillText(has ? SKILLS[s].icon : '🔒', bx + 27, by + 33); c.globalAlpha = 1;
     if (has && cd > 0) {
-      c.fillStyle = 'rgba(0,0,0,0.55)';
-      c.beginPath(); c.moveTo(bx + 27, by + 27); c.arc(bx + 27, by + 27, 27, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * cd / max); c.closePath(); c.fill();
-      c.font = '15px Jua, sans-serif'; c.fillStyle = '#fff'; c.fillText(cd.toFixed(cd < 1 ? 1 : 0), bx + 27, by + 32);
+      c.fillStyle = 'rgba(58,42,31,0.55)';
+      c.beginPath(); c.moveTo(bx + 27, by + 27); c.arc(bx + 27, by + 27, 26, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * cd / max); c.closePath(); c.fill();
+      inkText(c, cd.toFixed(cd < 1 ? 1 : 0), bx + 27, by + 33, FONT(18), 'center');
     }
-    c.font = '11px Jua, sans-serif'; c.fillStyle = '#ffd166'; c.fillText(SKILLS[s].key, bx + 27, by + 52);
-    bx += 60;
+    c.font = FONT(13); const kw = c.measureText(SKILLS[s].key).width + 10;
+    c.fillStyle = UI.red; rr(c, bx + 27 - kw / 2, by + 46, kw, 15, 6); c.fill();
+    c.strokeStyle = UI.ink; c.lineWidth = 1.3; c.stroke();
+    c.fillStyle = UI.cream; c.fillText(SKILLS[s].key, bx + 27, by + 58);
+    bx += 62;
   }
   if (p.dead) {
-    c.fillStyle = 'rgba(10,5,30,0.5)'; c.fillRect(0, 0, VW, VH);
-    c.font = '40px Jua, sans-serif'; c.fillStyle = '#fff'; c.textAlign = 'center';
-    c.fillText('쓰러졌어요… ' + Math.ceil(p.respawnT) + '초 뒤 시작 지점에서 부활!', VW / 2, VH / 2 - 40);
+    c.fillStyle = 'rgba(30,15,8,0.5)'; c.fillRect(0, 0, VW, VH);
+    neonText(c, '쓰러졌어요… ' + Math.ceil(p.respawnT) + '초 뒤 시작 지점에서 부활!', VW / 2, VH / 2 - 40, PEN(52));
   }
 }
+
 function currentGoal() {
   const h = tutorialHint();
   if (h) {
@@ -2410,7 +2581,9 @@ function buildLobby() {
   const best = parseFloat(store('elf_best'));
   el('best').textContent = isNaN(best) ? '🏆 최고 기록: 아직 없음' : '🏆 최고 기록: ' + fmtTime(best);
   el('startBtn').onclick = startGame;
-  lobbyElf.x = (VW - 380) / 2; lobbyElf.y = VH * 0.55;
+  addLights(el('lobby'), 14);
+  addLights(el('storyBox'), 24);
+  lobbyElf.x = (VW - 404) / 2 - 140; lobbyElf.y = VH * 0.72;
   say('narr', '아주 먼 북쪽, 일 년 내내 눈이 내리는 「스노우벨 마을」이 있었어요.');
   say('narr', '마을 한가운데엔 거대한 크리스마스 트리가 서 있었죠. 트리의 빛은 모두를 늘 행복하고 안전하게 지켜 주었어요.');
   say('narr', '엘프들의 임무는 단 하나 — 빛을 끄려는 「어둠」으로부터 트리를 지키는 것이었어요.');
@@ -2435,63 +2608,144 @@ function updateLobby(dt) {
     lobbyElf.x += ix / l * 220 * dt; lobbyElf.y += iy / l * 220 * dt; lobbyElf.walk += dt;
     if (ix) lobbyElf.face = ix > 0 ? 1 : -1;
   }
-  const right = VW > 760 ? VW - 390 : VW;
+  const right = VW > 760 ? VW - 404 : VW;
   const bottom = el('storyBox').getBoundingClientRect().top - 30;
   lobbyElf.x = clamp(lobbyElf.x, 30, right - 30);
-  lobbyElf.y = clamp(lobbyElf.y, VH * 0.35, Math.max(VH * 0.35, bottom));
+  lobbyElf.y = clamp(lobbyElf.y, VH * 0.56, Math.max(VH * 0.56, bottom));
 }
 function drawLobby(dt) {
   const c = ctx;
-  const g = c.createLinearGradient(0, 0, 0, VH);
-  g.addColorStop(0, '#0b1433'); g.addColorStop(0.45, '#1e2d5c'); g.addColorStop(0.46, '#dfeaf7'); g.addColorStop(1, '#f4f8fd');
-  c.fillStyle = g; c.fillRect(0, 0, VW, VH);
-  c.fillStyle = '#fff';
-  for (let i = 0; i < 60; i++) { const x = (i * 137.5) % VW, y = (i * 71.3) % (VH * 0.4); c.globalAlpha = 0.4 + 0.4 * Math.sin(gtime * 2 + i); circle(c, x, y, 1.3); c.fill(); }
+  const area = VW > 760 ? VW - 404 : VW;
+  const floorY = VH * 0.5;
+  // 나무 벽 (세로 판자)
+  const pw = 66;
+  for (let i = 0, x = 0; x < VW; i++, x += pw) {
+    c.fillStyle = ['#7b5a3c', '#83613f', '#745436', '#7f5d3d', '#77573a'][i % 5];
+    c.fillRect(x, 0, pw, floorY);
+    c.strokeStyle = 'rgba(50,30,15,0.2)'; c.lineWidth = 1.3;
+    for (let k = 0; k < 2; k++) {
+      c.beginPath(); c.moveTo(x + pw * (0.3 + k * 0.35), 0);
+      c.bezierCurveTo(x + pw * (0.45 + k * 0.3), floorY * 0.3, x + pw * (0.2 + k * 0.35), floorY * 0.6, x + pw * (0.35 + k * 0.3), floorY);
+      c.stroke();
+    }
+    if (i % 3 === 1) { c.fillStyle = 'rgba(50,30,15,0.3)'; c.beginPath(); c.ellipse(x + pw * 0.5, floorY * (0.3 + (i % 4) * 0.12), 4, 7, 0, 0, Math.PI * 2); c.fill(); }
+    c.strokeStyle = 'rgba(40,24,14,0.7)'; c.lineWidth = 2.2;
+    c.beginPath(); c.moveTo(x, 0);
+    for (let y = 0; y <= floorY; y += 30) c.lineTo(x + Math.sin(i * 7 + y * 0.09) * 1.3, y);
+    c.stroke();
+  }
+  // 창문 (밤하늘 + 눈)
+  const ww = Math.min(area * 0.3, 280), wh = floorY * 0.6, wx = area * 0.66, wy = VH * 0.08;
+  c.save();
+  const sky = c.createLinearGradient(0, wy, 0, wy + wh);
+  sky.addColorStop(0, '#0e0a12'); sky.addColorStop(1, '#2a1e26');
+  c.fillStyle = sky; c.fillRect(wx, wy, ww, wh);
+  c.beginPath(); c.rect(wx, wy, ww, wh); c.clip();
+  c.fillStyle = '#fff6dc';
+  for (let i = 0; i < 18; i++) { c.globalAlpha = 0.4 + 0.4 * Math.sin(gtime * 2 + i); circle(c, wx + (i * 53.7) % ww, wy + (i * 31.3) % (wh * 0.7), 1.2); c.fill(); }
   c.globalAlpha = 1;
-  c.fillStyle = '#fffbe0'; circle(c, VW * 0.12, VH * 0.12, 30); c.fill();
-  c.fillStyle = '#0b1433'; circle(c, VW * 0.12 + 12, VH * 0.12 - 6, 26); c.fill();
-  const area = VW > 760 ? VW - 390 : VW;
-  for (let i = 0; i < 12; i++) drawPine(c, (i + 0.5) * area / 12, VH * 0.46 + (i % 2) * 8, 1.1, i / 12);
-  // 로비 트리 (불 꺼진 상태)
-  const tx = area / 2, ty = VH * 0.46 + 40;
-  c.save(); c.translate(tx, ty); c.scale(0.45, 0.45);
+  c.fillStyle = '#fff6dc'; circle(c, wx + ww * 0.75, wy + wh * 0.22, 16); c.fill();
+  c.fillStyle = '#0e0a12'; circle(c, wx + ww * 0.75 + 7, wy + wh * 0.22 - 4, 14); c.fill();
+  c.fillStyle = 'rgba(255,255,255,0.9)';
+  for (const f of snowflakes) {
+    f.y += f.v * dt / VH; f.w += dt;
+    if (f.y > 1) { f.y = 0; f.x = Math.random(); }
+    circle(c, wx + f.x * ww + Math.sin(f.w) * 6, wy + f.y * wh, f.s * 0.8); c.fill();
+  }
+  c.fillStyle = '#eef0f4'; c.beginPath(); c.ellipse(wx + ww / 2, wy + wh, ww * 0.6, 16, 0, Math.PI, 0); c.fill();
+  c.restore();
+  c.strokeStyle = '#4a3324'; c.lineWidth = 12; c.strokeRect(wx, wy, ww, wh);
+  c.lineWidth = 7; c.beginPath(); c.moveTo(wx + ww / 2, wy); c.lineTo(wx + ww / 2, wy + wh); c.moveTo(wx, wy + wh / 2); c.lineTo(wx + ww, wy + wh / 2); c.stroke();
+  c.strokeStyle = UI.ink; c.lineWidth = 2; c.strokeRect(wx - 7, wy - 7, ww + 14, wh + 14); c.strokeRect(wx + 5, wy + 5, ww - 10, wh - 10);
+  // 리스 (창문 위)
+  c.save(); c.translate(wx + ww / 2, wy - 2);
+  for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2; c.fillStyle = i % 2 ? '#2f5d3a' : '#3f6b45'; c.beginPath(); c.ellipse(Math.cos(a) * 24, Math.sin(a) * 24, 9, 5, a + 1, 0, Math.PI * 2); c.fill(); }
+  c.fillStyle = UI.red; for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2 + 0.3; circle(c, Math.cos(a) * 22, Math.sin(a) * 22, 3); c.fill(); }
+  c.fillStyle = UI.red; c.beginPath(); c.moveTo(0, 22); c.lineTo(-10, 36); c.lineTo(-3, 36); c.lineTo(0, 26); c.lineTo(3, 36); c.lineTo(10, 36); c.closePath(); c.fill();
+  c.restore();
+  // 꼬마전구 줄
+  garland(c, -10, VH * 0.035, area + 20, Math.round(area / 70), 14, 4.5);
+  // 바닥
+  const fg = c.createLinearGradient(0, floorY, 0, VH);
+  fg.addColorStop(0, '#5a4130'); fg.addColorStop(1, '#3e2c20');
+  c.fillStyle = fg; c.fillRect(0, floorY, VW, VH - floorY);
+  c.strokeStyle = 'rgba(30,18,10,0.45)'; c.lineWidth = 1.5;
+  for (let y = floorY + 18, k = 0; y < VH; y += 22 + k * 3, k++) { c.beginPath(); c.moveTo(0, y); c.lineTo(VW, y); c.stroke(); }
+  c.strokeStyle = UI.ink; c.lineWidth = 3; c.beginPath(); c.moveTo(0, floorY); c.lineTo(VW, floorY); c.stroke();
+  // 러그 (니트 무늬)
+  const rx = area / 2, ry = VH * 0.69, rw = Math.min(area * 0.47, 520), rh = VH * 0.17;
+  c.fillStyle = 'rgba(20,10,5,0.35)'; c.beginPath(); c.ellipse(rx + 6, ry + 8, rw, rh, 0, 0, Math.PI * 2); c.fill();
+  c.fillStyle = '#ecdcc0'; c.beginPath(); c.ellipse(rx, ry, rw, rh, 0, 0, Math.PI * 2); c.fill();
+  c.strokeStyle = UI.ink; c.lineWidth = 2.5; c.stroke();
+  c.strokeStyle = UI.red; c.lineWidth = 9; c.beginPath(); c.ellipse(rx, ry, rw - 16, rh - 10, 0, 0, Math.PI * 2); c.stroke();
+  c.strokeStyle = '#ecdcc0'; c.lineWidth = 2; c.setLineDash([5, 7]); c.stroke(); c.setLineDash([]);
+  c.strokeStyle = UI.red; c.lineWidth = 2; c.beginPath(); c.ellipse(rx, ry, rw - 34, rh - 22, 0, 0, Math.PI * 2); c.stroke();
+  // 램프 (따뜻한 빛)
+  const lx = Math.max(70, area * 0.1), ly = floorY + 30;
+  const lg = c.createRadialGradient(lx, ly - 70, 10, lx, ly - 70, 260);
+  lg.addColorStop(0, 'rgba(255,200,110,0.45)'); lg.addColorStop(1, 'rgba(255,200,110,0)');
+  c.fillStyle = lg; circle(c, lx, ly - 70, 260); c.fill();
+  c.fillStyle = '#4a3324'; c.fillRect(lx - 3, ly - 70, 6, 90); c.fillRect(lx - 18, ly + 16, 36, 6);
+  c.fillStyle = '#f6ead2'; c.strokeStyle = UI.ink; c.lineWidth = 2;
+  c.beginPath(); c.moveTo(lx - 20, ly - 70); c.lineTo(lx + 20, ly - 70); c.lineTo(lx + 30, ly - 30); c.lineTo(lx - 30, ly - 30); c.closePath(); c.fill(); c.stroke();
+  // 로비 트리 (빛을 잃은 상태)
+  const tx = rx, tyy = floorY + 40;
+  c.save(); c.translate(tx, tyy); c.scale(0.5, 0.5);
   c.fillStyle = '#4a2c17'; c.fillRect(-26, -40, 52, 50);
+  c.fillStyle = UI.red; c.fillRect(-60, -10, 120, 30); c.strokeStyle = UI.ink; c.lineWidth = 4; c.strokeRect(-60, -10, 120, 30);
   for (let i = 0; i < 5; i++) {
     const yy = -30 - i * 62, w = 190 - i * 34;
-    c.fillStyle = i % 2 ? '#1c2f2a' : '#16261f';
+    c.fillStyle = i % 2 ? '#24372c' : '#1d2e24';
     c.beginPath(); c.moveTo(-w, yy); c.quadraticCurveTo(0, yy + 18, w, yy); c.lineTo(0, yy - 110); c.closePath(); c.fill();
+    c.strokeStyle = UI.ink; c.lineWidth = 3; c.stroke();
   }
-  drawStar(c, 0, -370, 38, 16, '#3c3a50');
+  for (const o of ornaments) { c.fillStyle = '#6b6258'; circle(c, o.x, o.y, 7); c.fill(); }
+  drawStar(c, 0, -370, 38, 16, '#5a5048');
+  c.strokeStyle = UI.ink; c.lineWidth = 3; starPath(c, 0, -370, 38, 16); c.stroke();
   c.restore();
-  c.font = '15px Jua, sans-serif'; c.textAlign = 'center'; c.fillStyle = '#3a4a7a';
-  c.fillText('빛을 잃은 트리…', tx, ty + 30);
+  // 선물 상자
+  const gift = (x, y, w, h, col) => {
+    c.fillStyle = col; c.fillRect(x, y, w, h); c.strokeStyle = UI.ink; c.lineWidth = 2; c.strokeRect(x, y, w, h);
+    c.fillStyle = '#f3e5cc'; c.fillRect(x + w / 2 - 3, y, 6, h); c.fillRect(x, y + h * 0.35, w, 5);
+    c.beginPath(); c.ellipse(x + w / 2 - 7, y - 4, 7, 4, -0.5, 0, Math.PI * 2); c.ellipse(x + w / 2 + 7, y - 4, 7, 4, 0.5, 0, Math.PI * 2); c.fill(); c.stroke();
+  };
+  gift(tx + 60, tyy + 2, 38, 30, UI.red); gift(tx + 100, tyy + 12, 28, 22, '#3f6b45'); gift(tx - 105, tyy + 6, 42, 28, '#c9a66b');
+  inkText(c, '빛을 잃은 트리…', tx, tyy + 62, FONT(18), 'center', UI.cream, '#3a2a1f');
   // 21개 자리
-  const spots = MAX_PLAYERS;
-  for (let i = 1; i < spots; i++) {
-    const a = i / spots * Math.PI * 2 + Math.PI / 2;
-    const sx = tx + Math.cos(a) * Math.min(area * 0.42, 420), sy = VH * 0.62 + Math.sin(a) * VH * 0.1;
-    c.strokeStyle = 'rgba(80,100,160,0.35)'; c.lineWidth = 2; c.setLineDash([4, 4]);
+  for (let i = 1; i < MAX_PLAYERS; i++) {
+    const a = i / MAX_PLAYERS * Math.PI * 2 + Math.PI / 2;
+    const sx = tx + Math.cos(a) * (rw - 60), sy = ry + Math.sin(a) * (rh - 34);
+    c.strokeStyle = 'rgba(58,42,31,0.45)'; c.lineWidth = 2; c.setLineDash([4, 4]);
     c.beginPath(); c.ellipse(sx, sy + 14, 16, 6, 0, 0, Math.PI * 2); c.stroke(); c.setLineDash([]);
-    drawElf(c, sx, sy, LOOKS[i % LOOKS.length], 1, 0, false, 0.8, 0.12);
+    drawElf(c, sx, sy, LOOKS[i % LOOKS.length], 1, 0, false, 0.8, 0.16);
   }
-  c.fillStyle = 'rgba(58,74,122,0.8)'; c.font = '14px Jua, sans-serif';
-  c.fillText('빈 자리 20개 — 나중에 친구들이 여기 모여요!', tx, ty + 52);
+  inkText(c, '빈 자리 20개 — 나중에 친구들이 여기 모여요!', tx, ry + rh + 26, FONT(17), 'center', UI.paper, '#2a1d14');
   drawElf(c, lobbyElf.x, lobbyElf.y, LOOKS[selectedLook], lobbyElf.face, lobbyElf.walk, lobbyElf.moving, 1.6);
   const nm = (el('nameInput').value || LOOKS[selectedLook].name);
-  c.font = '16px Jua, sans-serif'; c.lineWidth = 3; c.strokeStyle = '#fff'; c.strokeText(nm, lobbyElf.x, lobbyElf.y - 62);
-  c.fillStyle = '#1e2d5c'; c.fillText(nm, lobbyElf.x, lobbyElf.y - 62);
-  drawSnow(dt, 1);
+  inkText(c, nm, lobbyElf.x, lobbyElf.y - 62, FONT(19), 'center', UI.ink, UI.cream);
+  // 따뜻한 비네트
+  const vg = c.createRadialGradient(area / 2, VH * 0.55, Math.min(VW, VH) * 0.35, area / 2, VH * 0.55, Math.max(VW, VH) * 0.8);
+  vg.addColorStop(0, 'rgba(30,15,5,0)'); vg.addColorStop(1, 'rgba(30,15,5,0.55)');
+  c.fillStyle = vg; c.fillRect(0, 0, VW, VH);
 }
+
 
 // =====================================================================
 //  일시정지 / 승리
 // =====================================================================
+function cardHead(title) {
+  return '<div class="cardHead night"><div class="mc">Merry Christmas</div><h2 class="neon">' + title + '</h2></div><div class="knit"></div>';
+}
+function showOverlay(html) {
+  el('overlayCard').innerHTML = html;
+  addLights(el('overlayCard'), 12);
+  el('overlay').classList.add('on');
+}
 function setPaused(v) {
   paused = v;
   if (v) {
-    el('overlayCard').innerHTML = '<h2>⏸ 일시정지</h2><p>타이머도 멈췄어요.</p><p>⏱ ' + fmtTime(runTime) + ' · ⭐ ' + teamShards + '/4</p>' +
-      '<button id="resumeBtn">계속하기 (Esc)</button><button class="alt" id="lobbyBtn">로비로</button>';
-    el('overlay').classList.add('on');
+    showOverlay(cardHead('⏸ 잠깐 쉬어 가요') + '<p>타이머도 멈췄어요.</p><p>⏱ ' + fmtTime(runTime) + ' · ⭐ ' + teamShards + '/4</p>' +
+      '<button class="btn go" id="resumeBtn">계속하기 (Esc)</button><button class="btn" id="lobbyBtn">로비로</button>');
     el('resumeBtn').onclick = () => setPaused(false);
     el('lobbyBtn').onclick = backToLobby;
   } else el('overlay').classList.remove('on');
@@ -2501,16 +2755,16 @@ function showWin() {
   const prev = parseFloat(store('elf_best'));
   const isBest = isNaN(prev) || runTime < prev;
   if (isBest) store('elf_best', String(runTime));
-  el('overlayCard').innerHTML = '<h2>🎄 크리스마스를 되찾았다!</h2>' +
-    '<p>클리어 시간</p><p class="big">' + fmtTime(runTime) + '</p>' +
-    (isBest ? '<p style="color:#7dffa8">🏆 새로운 최고 기록!</p>' : '<p>🏆 최고 기록: ' + fmtTime(prev) + '</p>') +
+  showOverlay(cardHead('🎄 크리스마스를 되찾았다!') +
+    '<p class="soft">클리어 시간</p><p class="big">' + fmtTime(runTime) + '</p>' +
+    (isBest ? '<p class="good">🏆 새로운 최고 기록!</p>' : '<p>🏆 최고 기록: ' + fmtTime(prev) + '</p>') +
     '<p>🧝 ' + local.name + ' · Lv.' + local.level + ' · 👾 ' + local.kills + '마리 · 💫 ' + local.deaths + '번 쓰러짐</p>' +
-    '<p style="color:#9fd3ff">매일매일이 크리스마스가 되었어요! 🎅</p>' +
-    '<button id="againBtn">다시 하기</button><button class="alt" id="lobbyBtn">로비로</button>';
-  el('overlay').classList.add('on');
+    '<p class="soft">매일매일이 크리스마스가 되었어요! 🎅</p>' +
+    '<button class="btn go" id="againBtn">다시 하기</button><button class="btn" id="lobbyBtn">로비로</button>');
   el('againBtn').onclick = () => { el('overlay').classList.remove('on'); startGame(); };
   el('lobbyBtn').onclick = backToLobby;
 }
+
 function backToLobby() {
   el('overlay').classList.remove('on');
   paused = false; state = 'lobby'; players = []; local = null;
@@ -2538,6 +2792,7 @@ function frame(now) {
     ctx.fillStyle = '#0b1020'; ctx.fillRect(0, 0, VW, VH);
     drawWorld();
     drawSnow(paused ? 0 : dt, 0.7);
+    ctx.save(); ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = '#f7e6cb'; ctx.fillRect(0, 0, VW, VH); ctx.restore();
     if (state === 'ending' || state === 'win') drawCinematic();
     else if (local) drawHUD();
     objT += dt;
