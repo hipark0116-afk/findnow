@@ -214,6 +214,41 @@
   @media (max-width: 760px) {
     #lobby { left: 12px; right: 12px; width: auto; }
   }
+  /* ===== 모바일 / 작은 화면 ===== */
+  html, body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+  canvas#game { touch-action: none; }
+  button, input { touch-action: manipulation; }
+  #storyTicker {
+    display: none; flex: 1; min-width: 0; margin: 0 4px 5px; padding: 1px 8px; font: inherit; font-size: 16px; text-align: left;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+    background: var(--cream); color: var(--ink); border: 1.5px solid var(--ink-soft); border-radius: 8px;
+  }
+  #storyBox.collapsed #storyTicker { display: block; }
+  #storyBox.collapsed .tab:not(.on) { display: none; }
+  #storyBox.collapsed .sndBtn:first-of-type { margin-left: 0; }
+  #storyTicker.pulse { animation: tickerPulse 0.8s ease-out; }
+  @keyframes tickerPulse { 0% { background: #ffe9c2; box-shadow: 0 0 10px #ffb347; } 100% { background: var(--cream); box-shadow: none; } }
+  @media (max-width: 640px) {
+    .tab { font-size: 15px; padding: 1px 8px 0; }
+    .sndBtn .lbl, #toggleStory .lbl { display: none; }
+    #storyBody { height: 104px; padding: 8px 10px; }
+    #portrait { width: 52px; height: 52px; font-size: 28px; }
+    #storyText { font-size: 19px; }
+  }
+  @media (max-width: 500px) {
+    #lobby h1 { font-size: 34px; }
+    .lobbyHead { padding: 16px 10px 6px; }
+  }
+  @media (max-height: 560px) {
+    .lobbyHead { padding: 12px 12px 4px; }
+    #lobby h1 { font-size: 30px; }
+    .mc { font-size: 20px; }
+    #lobby .sub { display: none; }
+    #storyBody { height: 90px; }
+    #storyText { font-size: 18px; }
+    #startBtn { font-size: 26px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .bulb, .night::before, #storyTicker.pulse { animation: none; } }
 </style>
 </head>
 <body>
@@ -263,9 +298,10 @@
     <button class="tab" data-pane="paneGoal">🎯 목표</button>
     <button class="tab" data-pane="paneHow">🎮 게임 방법</button>
     <button class="tab" data-pane="paneLog">📜 기록</button>
-    <button id="musicBtn" class="sndBtn" title="음악 켜기/끄기 (M)">🎵 음악</button>
-    <button id="sfxBtn" class="sndBtn" title="효과음 켜기/끄기 (N)">🔊 효과음</button>
-    <button id="toggleStory">접기 ▼ (H)</button>
+    <button id="storyTicker" title="눌러서 이야기 펼치기"></button>
+    <button id="musicBtn" class="sndBtn" title="음악 켜기/끄기 (M)">🎵<span class="lbl"> 음악</span></button>
+    <button id="sfxBtn" class="sndBtn" title="효과음 켜기/끄기 (N)">🔊<span class="lbl"> 효과음</span></button>
+    <button id="toggleStory">접기 ▼<span class="lbl"> (H)</span></button>
   </div>
   <div id="storyBody">
     <div class="pane on" id="paneStory">
@@ -359,7 +395,7 @@ const cvs = document.getElementById('game');
 const ctx = cvs.getContext('2d');
 let VW = 0, VH = 0, DPR = 1;
 function resize() {
-  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  DPR = Math.min(window.devicePixelRatio || 1, (('ontouchstart' in window) || navigator.maxTouchPoints > 0) ? 1.5 : 2);
   VW = innerWidth; VH = innerHeight;
   cvs.width = VW * DPR; cvs.height = VH * DPR;
   cvs.style.width = VW + 'px'; cvs.style.height = VH + 'px';
@@ -748,6 +784,9 @@ function updateStory(dt) {
     const w = WHO[story.cur.who];
     el('portrait').textContent = w.i;
     el('speaker').textContent = w.n;
+    const tk = el('storyTicker');
+    tk.textContent = w.i + ' ' + w.n + ': ' + story.cur.text;
+    tk.classList.remove('pulse'); void tk.offsetWidth; tk.classList.add('pulse');
     const p = document.createElement('p');
     p.innerHTML = '<b>' + w.n + ':</b> ' + story.cur.text;
     el('paneLog').appendChild(p);
@@ -776,12 +815,14 @@ document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
   if (el('storyBox').classList.contains('collapsed')) toggleStoryBox();
   if (t.dataset.pane === 'paneGoal') renderObjectives();
 });
-function toggleStoryBox() {
+function toggleStoryBox(auto) {
   const b = el('storyBox');
   b.classList.toggle('collapsed');
-  el('toggleStory').textContent = b.classList.contains('collapsed') ? '펼치기 ▲ (H)' : '접기 ▼ (H)';
+  if (auto !== true) storyUserToggled = true;
+  el('toggleStory').innerHTML = b.classList.contains('collapsed') ? '펼치기 ▲<span class="lbl"> (H)</span>' : '접기 ▼<span class="lbl"> (H)</span>';
 }
-el('toggleStory').onclick = toggleStoryBox;
+el('toggleStory').onclick = () => toggleStoryBox();
+el('storyTicker').onclick = () => toggleStoryBox();
 
 function renderObjectives() {
   const items = [];
@@ -908,9 +949,10 @@ function updatePlayer(p, dt) {
   if (p === local) {
     ix = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
     iy = (keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0);
+    if (touchUI.moveActive) { ix = touchUI.mx; iy = touchUI.my; }   // 터치 조이스틱 (살짝 밀면 천천히)
   }
-  const il = Math.hypot(ix, iy);
-  if (il) { ix /= il; iy /= il; }
+  let il = Math.hypot(ix, iy);
+  if (il > 1) { ix /= il; iy /= il; il = 1; }
   p.ix = ix; p.iy = iy;
   const ox = p.x, oy = p.y;
   const ter = terrainAt(p.x, p.y);
@@ -953,7 +995,8 @@ function updatePlayer(p, dt) {
   // 조준 & 사격
   let firing = false;
   if (p === local) {
-    if (autoAim) {
+    if (touchUI.aimActive) { p.aim = touchUI.aimAngle; firing = true; }
+    else if (autoAim || touchUI.aimHeld) {
       const t = nearestEnemy(p.x, p.y, 560);
       if (t) { p.aim = Math.atan2(t.y - (t.z || 0) - p.y, t.x - p.x); firing = true; }
       else if (il) p.aim = Math.atan2(iy, ix);
@@ -1032,6 +1075,7 @@ function useSkill(p, s) {
   if (s === 'dash') {
     let dx = p.ix, dy = p.iy;
     if (!dx && !dy) { dx = Math.cos(p.aim); dy = Math.sin(p.aim); }
+    const dl = Math.hypot(dx, dy) || 1; dx /= dl; dy /= dl;
     p.dvx = dx * 900; p.dvy = dy * 900; p.dashT = 0.18; p.invuln = Math.max(p.invuln, 0.25);
     sfx('dash', p.x, p.y);
     for (let i = 1; i <= 4; i++) later(i * 0.035, () => particles.push({ kind: 'ghost', x: p.x, y: p.y, vx: 0, vy: 0, life: 0.3, max: 0.3, look: p.look, face: p.face, walk: p.walk }));
@@ -2202,7 +2246,10 @@ function drawCinematic() {
   const lb = 46 * ss(T / 1.5);
   c.fillStyle = '#000'; c.fillRect(0, 0, VW, lb); c.fillRect(0, VH - lb, VW, lb);
   c.font = FONT(17); c.textAlign = 'right'; c.fillStyle = 'rgba(243,229,204,0.75)';
-  if (state === 'ending') c.fillText('Esc: 건너뛰기', VW - 16, lb - 16);
+  if (state === 'ending') {
+    c.fillText(touchUI.enabled ? '⏭ 여기를 눌러 건너뛰기' : 'Esc: 건너뛰기', VW - 16, Math.max(lb, 24) - 16);
+    touchZone(VW - 220, 0, 220, Math.max(lb, 40) + 12, () => skipEnding());
+  }
   c.textAlign = 'left'; c.fillText('⏱ 클리어 ' + fmtTime(runTime), 16, lb - 16);
   // 끝
   if (T > 23) {
@@ -3285,6 +3332,172 @@ function setupNetUI() {
   updateNetUI();
 }
 
+
+// =====================================================================
+//  모바일 터치 조작
+//  · 왼쪽 화면: 누르고 끌면 이동 조이스틱
+//  · 오른쪽 화면: 누르고 끌면 그 방향으로 조준·발사 (안 누르면 자동 조준으로 쏴요)
+//  · 스킬·무기·일시정지는 화면의 버튼을 톡!
+// =====================================================================
+const IS_TOUCH = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+const touchUI = { enabled: false, move: null, aim: null, mx: 0, my: 0, moveActive: false, aimActive: false, aimHeld: false, aimAngle: 0, zones: [], hinted: false };
+let hudS = 1;
+function touchZone(x, y, w, h, fn) { touchUI.zones.push({ x, y, w, h, fn }); }
+function pressSkill(s) {
+  if (!local || state !== 'play' || paused || local.dead) return;
+  if (Net.mode === 'client') clientSkill(s); else useSkill(local, s);
+}
+function hudScale() {
+  if (!touchUI.enabled && VW >= 1000 && VH >= 640) return 1;
+  return clamp(Math.min(VW / 1000, VH / 640), 0.55, 1);
+}
+function enableTouch() {
+  if (touchUI.enabled) return;
+  touchUI.enabled = true;
+  autoAim = true;                      // 손가락으로 할 땐 자동 조준이 기본
+  autoStoryLayout();
+}
+function recalcTouch() {
+  const R = 55, m = touchUI.move;
+  if (m) {
+    let dx = m.x - m.ox, dy = m.y - m.oy;
+    const d = Math.hypot(dx, dy);
+    if (d > R) { m.ox = m.x - dx / d * R; m.oy = m.y - dy / d * R; dx = m.x - m.ox; dy = m.y - m.oy; }   // 조이스틱이 손가락을 따라와요
+    touchUI.mx = dx / R; touchUI.my = dy / R;
+    touchUI.moveActive = Math.hypot(dx, dy) / R > 0.15;
+  } else { touchUI.moveActive = false; touchUI.mx = touchUI.my = 0; }
+  const a = touchUI.aim;
+  if (a) {
+    const dx = a.x - a.ox, dy = a.y - a.oy;
+    touchUI.aimHeld = true;
+    touchUI.aimActive = Math.hypot(dx, dy) > 16;
+    if (touchUI.aimActive) touchUI.aimAngle = Math.atan2(dy, dx);
+  } else { touchUI.aimHeld = false; touchUI.aimActive = false; }
+}
+cvs.addEventListener('touchstart', e => {
+  audioInit(); enableTouch();
+  for (const t of e.changedTouches) {
+    const x = t.clientX, y = t.clientY;
+    const z = touchUI.zones.find(z => x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h);
+    if (z) { z.fn(); continue; }
+    if (state === 'lobby') { lobbyElf.tx = x; lobbyElf.ty = y; continue; }
+    if (state !== 'play' || paused) continue;
+    if (x < VW / 2) { if (!touchUI.move) touchUI.move = { id: t.identifier, ox: x, oy: y, x, y }; }
+    else if (!touchUI.aim) touchUI.aim = { id: t.identifier, ox: x, oy: y, x, y };
+  }
+  if (!touchUI.hinted && state === 'play') {
+    touchUI.hinted = true;
+    if (VH > VW) toast('📱 휴대폰을 가로로 돌리면 더 넓게 보여요!', '#9fd3ff');
+  }
+  recalcTouch();
+  e.preventDefault();
+}, { passive: false });
+cvs.addEventListener('touchmove', e => {
+  for (const t of e.changedTouches) {
+    for (const k of ['move', 'aim']) { const s = touchUI[k]; if (s && s.id === t.identifier) { s.x = t.clientX; s.y = t.clientY; } }
+    if (state === 'lobby') { lobbyElf.tx = t.clientX; lobbyElf.ty = t.clientY; }
+  }
+  recalcTouch();
+  e.preventDefault();
+}, { passive: false });
+const touchEnd = e => {
+  for (const t of e.changedTouches) for (const k of ['move', 'aim']) if (touchUI[k] && touchUI[k].id === t.identifier) touchUI[k] = null;
+  recalcTouch();
+};
+cvs.addEventListener('touchend', touchEnd);
+cvs.addEventListener('touchcancel', touchEnd);
+
+function touchButton(x, y, r, icon, opt = {}) {
+  const c = ctx;
+  c.save();
+  if (opt.glow) { c.shadowColor = '#ffb347'; c.shadowBlur = 14; }
+  c.fillStyle = 'rgba(25,12,6,0.4)'; circle(c, x + 3, y + 4, r); c.fill();
+  c.fillStyle = opt.locked ? UI.paper2 : opt.on ? '#ffe9c2' : UI.paper; circle(c, x, y, r); c.fill();
+  c.shadowBlur = 0;
+  c.strokeStyle = opt.on ? UI.red : UI.ink; c.lineWidth = opt.on ? 3 : 2.2; circle(c, x, y, r); c.stroke();
+  c.font = Math.round(r * 0.95) + 'px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.globalAlpha = opt.locked ? 0.35 : 1; c.fillStyle = UI.ink; c.fillText(opt.locked ? '🔒' : icon, x, y + 1); c.globalAlpha = 1;
+  if (opt.cd > 0 && opt.max) {
+    c.fillStyle = 'rgba(58,42,31,0.55)';
+    c.beginPath(); c.moveTo(x, y); c.arc(x, y, r - 1, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, opt.cd / opt.max)); c.closePath(); c.fill();
+    c.textBaseline = 'alphabetic';
+    inkText(c, opt.cd.toFixed(opt.cd < 1 ? 1 : 0), x, y + 7, FONT(Math.round(r * 0.75)), 'center');
+  }
+  c.textBaseline = 'alphabetic';
+  c.restore();
+}
+function drawTouchControls() {
+  const p = local, c = ctx;
+  if (!p) return;
+  const boxTop = el('storyBox').getBoundingClientRect().top;
+  // 무기 줄 (왼쪽 위, 상태창 아래)
+  const WS = 40, narrow = VW / hudS < 860;
+  let x = 12, y = narrow ? 300 * hudS : 120 * hudS + 8;      // 좁은 화면에서는 타이머·지도 아래로
+  WEAPON_ORDER.forEach(t => {
+    const w = p.weapons.find(q => q.type === t), on = w && p.weapons[p.wIdx] === w;
+    paperPanel(c, x, y, WS, WS, 8, on ? '#ffe9c2' : w ? UI.paper : UI.paper2);
+    if (on) { c.strokeStyle = UI.red; c.lineWidth = 3; rr(c, x - 2, y - 2, WS + 4, WS + 4, 10); c.stroke(); }
+    c.font = '20px sans-serif'; c.textAlign = 'center'; c.globalAlpha = w ? 1 : 0.25; c.fillText(WEAPONS[t].icon, x + WS / 2, y + WS * 0.68); c.globalAlpha = 1;
+    if (w) touchZone(x - 2, y - 2, WS + 4, WS + 4, () => { p.wIdx = p.weapons.indexOf(w); sfx('click'); });
+    x += WS + 5;
+  });
+  // ⏸ 일시정지 · 🎯 조준 바꾸기
+  const by = y + WS + 30;
+  touchButton(32, by, 20, '⏸');
+  touchZone(8, by - 24, 48, 48, () => onKeyPress('Escape'));
+  touchButton(80, by, 20, '🎯', { on: autoAim });
+  touchZone(56, by - 24, 48, 48, () => onKeyPress('KeyT'));
+  // 스킬 (오른쪽 아래 엄지 자리)
+  const cx0 = VW - 56, cy0 = boxTop - 58;
+  const draw = (s, bx, by2, r) => {
+    const has = p.skills[s], max = s === 'dash' ? SKILLS.dash.cd * p.dashCdMul : SKILLS[s].cd;
+    touchButton(bx, by2, r, SKILLS[s].icon, { locked: !has, cd: has ? p.cd[s] : 0, max, glow: has && p.cd[s] <= 0 });
+    touchZone(bx - r - 4, by2 - r - 4, (r + 4) * 2, (r + 4) * 2, () => pressSkill(s));
+  };
+  draw('dash', cx0, cy0, 34);
+  const topLimit = (narrow ? 300 * hudS + WS + 60 : (22 + 186 + 7 + 80) * hudS);   // 지도·목표 표시를 가리지 않게
+  if (cy0 - 156 - 30 > topLimit) {
+    // 세로처럼 높은 화면: 대시를 둘러싼 반원 두 줄
+    ['nova', 'turret', 'meteor'].forEach((s, i) => { const a = Math.PI + i / 2 * Math.PI / 2; draw(s, cx0 + Math.cos(a) * 92, cy0 + Math.sin(a) * 92, 25); });
+    ['chain', 'tornado', 'heal', 'rudolph'].forEach((s, i) => { const a = Math.PI + i / 3 * Math.PI / 2; draw(s, cx0 + Math.cos(a) * 156, cy0 + Math.sin(a) * 156, 25); });
+  } else {
+    // 가로처럼 낮은 화면: 대시 왼쪽으로 두 줄
+    ['nova', 'turret', 'meteor', 'chain'].forEach((s, i) => draw(s, cx0 - 74 - i * 57, cy0 + 8, 25));
+    ['tornado', 'heal', 'rudolph'].forEach((s, i) => draw(s, cx0 - 102 - i * 57, cy0 - 50, 25));
+  }
+  // 조이스틱
+  const stick = (s, col) => {
+    c.save();
+    c.globalAlpha = 0.5; c.fillStyle = UI.paper; circle(c, s.ox, s.oy, 55); c.fill();
+    c.globalAlpha = 0.9; c.strokeStyle = UI.ink; c.lineWidth = 2.5; circle(c, s.ox, s.oy, 55); c.stroke();
+    c.fillStyle = col; circle(c, s.x, s.y, 24); c.fill(); c.stroke();
+    c.restore();
+  };
+  if (touchUI.move) stick(touchUI.move, UI.green);
+  else {
+    c.save(); c.globalAlpha = 0.28; c.strokeStyle = UI.cream; c.lineWidth = 3; c.setLineDash([8, 8]);
+    circle(c, 90, boxTop - 90, 50); c.stroke(); c.setLineDash([]);
+    c.globalAlpha = 0.6; inkText(c, '여기를 끌어서 이동', 90, boxTop - 86, FONT(15), 'center', UI.ink, UI.cream);
+    c.restore();
+  }
+  if (touchUI.aim) stick(touchUI.aim, UI.red);
+}
+
+// 작은 화면에서는 이야기 박스를 한 줄 알림 띠로 접어요 (누르면 펼쳐져요)
+let storyUserToggled = false;
+function autoStoryLayout() {
+  if (storyUserToggled) return;
+  const small = VH < 560 || VW < 640 || (touchUI.enabled && VH < 700);
+  const b = el('storyBox');
+  if (small !== b.classList.contains('collapsed')) toggleStoryBox(true);
+}
+function layoutLobby() {
+  const top = el('storyBox').getBoundingClientRect().top;
+  const want = Math.max(12, Math.round(VH - top + 12)) + 'px';
+  if (el('lobby').style.bottom !== want) el('lobby').style.bottom = want;
+}
+addEventListener('resize', autoStoryLayout);
+
 // =====================================================================
 //  그리기 — 캐릭터
 // =====================================================================
@@ -4311,8 +4524,17 @@ function drawSnow(dt, density = 1) {
 //  HUD
 // =====================================================================
 function drawHUD() {
+  // 작은 화면에서는 HUD를 통째로 줄여서 그려요
+  const realVW = VW, realVH = VH, s = hudScale();
+  hudS = s;
+  ctx.save(); ctx.scale(s, s);
+  VW = realVW / s; VH = realVH / s;
+  try { drawHUDInner(); } finally { VW = realVW; VH = realVH; ctx.restore(); }
+  if (touchUI.enabled && state === 'play' && local && !local.dead) drawTouchControls();
+}
+function drawHUDInner() {
   const p = local, c = ctx;
-  const boxTop = el('storyBox').getBoundingClientRect().top;
+  const boxTop = el('storyBox').getBoundingClientRect().top / hudS;
   c.textBaseline = 'alphabetic';
   // 왼쪽 위: 플레이어 상태 (종이 카드 + 꼬마전구)
   paperPanel(c, 12, 16, 280, 96, 14);
@@ -4332,7 +4554,9 @@ function drawHUD() {
   const hb = biomeAt(p.x, p.y);
   c.fillText('👾 ' + p.kills + '  💫 ' + p.deaths + '  · ' + hb.icon + hb.name + ' · ' + '★'.repeat(zoneAt(p.x, p.y)), 86, 100);
 
-  // 위 가운데: 타이머 + 별조각
+  // 위 가운데: 타이머 + 별조각 (좁은 화면에서는 한 줄 아래로)
+  const topOff = VW < 860 ? 104 : 0;
+  c.save(); c.translate(0, topOff);
   c.textAlign = 'center';
   paperPanel(c, VW / 2 - 124, 16, 248, 70, 16);
   garland(c, VW / 2 - 112, 16, 224, 8, 4, 3);
@@ -4349,7 +4573,7 @@ function drawHUD() {
   // 보스 체력바 (어두운 밤하늘 카드)
   let boss = null, bd = 1e9;
   for (const e of enemies) if (e.kind === 'boss' && e.awake && !e.dead) { const d = dist(e.x, e.y, p.x, p.y); if (d < bd) { bd = d; boss = e; } }
-  let ty = 114;
+  let ty = 114 + (touchUI.enabled && VW < 860 ? 290 : 0);
   if (boss) {
     const bw = Math.min(520, VW - 440);
     paperPanel(c, VW / 2 - bw / 2 - 14, 96, bw + 28, 50, 12, '#2b1f1a');
@@ -4374,6 +4598,8 @@ function drawHUD() {
     c.fillStyle = UI.ink; c.textAlign = 'center'; c.fillText(t.text, VW / 2 + 9, y);
   }
   c.globalAlpha = 1;
+
+  c.restore();
 
   // 오른쪽 위: 지도
   const m = Math.min(186, VW * 0.22), mx = VW - m - 18, my = 22, sc = m / W;
@@ -4417,7 +4643,7 @@ function drawHUD() {
   const gw = c.measureText(goal.text).width + 26;
   paperPanel(c, VW - gw - 18, my + m + 18, gw, 30, 12);
   c.fillStyle = UI.ink; c.fillText(goal.text, VW - 31, my + m + 39);
-  inkText(c, autoAim ? '🎯 자동 조준 ON (T)' : '🖱 마우스 조준 (T: 자동)', VW - 22, my + m + 70, FONT(16), 'right', autoAim ? UI.green : UI.soft);
+  inkText(c, touchUI.enabled ? (autoAim ? '🎯 자동 조준 켜짐' : '✋ 오른쪽을 끌어서 조준') : autoAim ? '🎯 자동 조준 ON (T)' : '🖱 마우스 조준 (T: 자동)', VW - 22, my + m + 70, FONT(16), 'right', autoAim ? UI.green : UI.soft);
   // 목표 방향 화살표
   if (goal.x !== undefined) {
     const sx = goal.x - cam.x, sy = goal.y - cam.y;
@@ -4433,6 +4659,7 @@ function drawHUD() {
     }
   }
 
+  if (!touchUI.enabled) {
   // 무기 & 스킬 바 (스토리 박스 위)
   const S = VW < 1100 ? 40 : 48, GAP = S + 6, SH = S / 2;
   const by = boxTop - S - 16;
@@ -4469,6 +4696,7 @@ function drawHUD() {
     c.strokeStyle = UI.ink; c.lineWidth = 1.3; c.stroke();
     c.fillStyle = UI.cream; c.fillText(SKILLS[s].key, cx2, by + S + 7);
     bx += GAP;
+  }
   }
   if (p.dead) {
     c.fillStyle = 'rgba(30,15,8,0.5)'; c.fillRect(0, 0, VW, VH);
@@ -4553,9 +4781,16 @@ function updateLobby(dt) {
   gtime += dt;
   const ix = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
   const iy = (keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0);
-  const l = Math.hypot(ix, iy);
-  lobbyElf.moving = l > 0;
-  if (l) {
+  let l = Math.hypot(ix, iy);
+  if (l) lobbyElf.tx = undefined;
+  else if (lobbyElf.tx !== undefined) {
+    // 터치한 곳으로 걸어가기
+    const dx = lobbyElf.tx - lobbyElf.x, dy = lobbyElf.ty - lobbyElf.y, d = Math.hypot(dx, dy);
+    if (d < 8) lobbyElf.tx = undefined;
+    else { lobbyElf.x += dx / d * Math.min(d, 220 * dt); lobbyElf.y += dy / d * Math.min(d, 220 * dt); lobbyElf.walk += dt; if (Math.abs(dx) > 2) lobbyElf.face = dx > 0 ? 1 : -1; l = -1; }
+  }
+  lobbyElf.moving = l !== 0;
+  if (l > 0) {
     lobbyElf.x += ix / l * 220 * dt; lobbyElf.y += iy / l * 220 * dt; lobbyElf.walk += dt;
     if (ix) lobbyElf.face = ix > 0 ? 1 : -1;
   }
@@ -4767,7 +5002,9 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 function frameBody(dt) {
+  touchUI.zones = [];
   if (state === 'lobby') {
+    layoutLobby();
     updateLobby(dt);
     drawLobby(dt);
     if (Net.mode === 'host') hostLobbyTick(dt);
@@ -4788,6 +5025,7 @@ function frameBody(dt) {
   }
 }
 buildLobby();
+if (IS_TOUCH) enableTouch(); else autoStoryLayout();
 requestAnimationFrame(frame);
 </script>
 </body>
