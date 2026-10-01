@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>엘프의 크리스마스: 빛을 되찾아라</title>
+<title>엘프의 크리스마스</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Gamja+Flower&family=Nanum+Pen+Script&family=Caveat:wght@600&display=swap" rel="stylesheet">
 <style>
@@ -3254,6 +3254,20 @@ function updateNetUI() {
   sb.textContent = Net.mode === 'client' ? '방장을 기다리는 중…' : Net.mode === 'host' ? '함께 시작 ▶ (' + n + '명)' : '게임 시작 ▶';
 }
 function setupNetUI() {
+  if (window.ARTIFACT_BUILD) {
+    // 웹 링크(Artifact) 버전은 브라우저 보안 때문에 친구끼리 직접 연결(WebRTC)을 쓸 수 없어요
+    const blocked = () => {
+      audioInit(); sfx('click');
+      Net.ui = 'solo'; updateNetUI();
+      toast('👥 친구와 함께하기는 HTML 파일로 열었을 때만 돼요', '#9fd3ff');
+      say('spark', '이 웹 링크에서는 혼자 하기만 할 수 있어! 친구들과 함께하려면 게임 HTML 파일(christmas-elves.html)을 각자 컴퓨터에서 열고 [방 만들기]와 [참가하기]를 써 줘.');
+    };
+    el('modeSolo').onclick = () => { sfx('click'); Net.ui = 'solo'; updateNetUI(); };
+    el('modeHost').onclick = blocked;
+    el('modeJoin').onclick = blocked;
+    updateNetUI();
+    return;
+  }
   addEventListener('pagehide', () => { if (Net.mode !== 'solo') netLeave(); });   // 창을 닫으면 친구들에게 알려요
   el('modeSolo').onclick = () => { sfx('click'); netLeave(); Net.ui = 'solo'; Net.status = ''; updateNetUI(); };
   el('modeHost').onclick = () => { audioInit(); sfx('click'); if (Net.mode !== 'host') hostCreate(); ensureBgTicker(); };
