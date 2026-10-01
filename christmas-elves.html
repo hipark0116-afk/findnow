@@ -1396,10 +1396,10 @@ function updatePickups(dt) {
   }
   for (const k of pickups) {
     k.t += dt;
-    const p = nearestPlayer(k.x, k.y, k.type === 'xp' ? 150 : 40);
+    const p = nearestPlayer(k.x, k.y, k.type === 'xp' ? 150 : k.type === 'shard' ? 180 : 40);
     if (!p) continue;
     const d = dist(k.x, k.y, p.x, p.y);
-    if (k.type === 'xp' && d > 22) {
+    if ((k.type === 'xp' || k.type === 'shard') && d > 22) {
       const s = 520 * dt;
       k.x += (p.x - k.x) / d * s; k.y += (p.y - k.y) / d * s;
       continue;
@@ -1424,7 +1424,8 @@ function updatePickups(dt) {
       renderObjectives();
     }
   }
-  pickups = pickups.filter(k => !k.dead && k.t < 40);
+  // 별조각은 주울 때까지 절대 사라지지 않음
+  pickups = pickups.filter(k => !k.dead && (k.type === 'shard' || k.t < 40));
 }
 
 function checkFinal() {
@@ -2458,6 +2459,7 @@ function drawHUD() {
   for (const e of enemies) if (e.kind === 'elite' && !e.dead) { c.fillStyle = '#d9822b'; circle(c, mx + e.x * sc, my + e.y * sc, 2.5); c.fill(); }
   c.font = '13px sans-serif';
   for (const d of BOSS_DEFS) c.fillText(bossDefeated[d.id] ? '✅' : '💀', mx + d.x * sc, my + d.y * sc);
+  for (const k of pickups) if (k.type === 'shard') c.fillText('⭐', mx + k.x * sc, my + k.y * sc - 12 + Math.sin(gtime * 5) * 2);
   c.font = '16px sans-serif'; c.fillText(treeLight > 0 ? '🌟' : '🎄', mx + CX * sc, my + CY * sc);
   c.strokeStyle = 'rgba(58,42,31,0.45)'; c.lineWidth = 1; c.setLineDash([3, 3]);
   c.strokeRect(mx + cam.x * sc, my + cam.y * sc, VW * sc, VH * sc); c.setLineDash([]);
