@@ -124,6 +124,11 @@
     border-radius: 11px 8px 12px 7px / 7px 12px 8px 11px;
   }
   .modeBtn.on { border-color: var(--green-dark); background: #dfe8cf; }
+  .diffRow { display: flex; gap: 5px; align-items: center; margin-top: 6px; }
+  .diffRow .dl { font-size: 15px; color: var(--ink-soft); white-space: nowrap; }
+  .diffBtn { flex: 1; padding: 2px; font: inherit; font-size: 15px; cursor: pointer; white-space: nowrap; background: var(--cream); color: var(--ink); border: 2px solid var(--ink-soft); border-radius: 10px 7px 11px 6px / 6px 11px 7px 10px; }
+  .diffBtn.on { border-color: var(--red); background: #ffe2d6; box-shadow: 0 0 0 1px var(--red); }
+  .diffBtn:disabled { opacity: 0.55; cursor: default; }
   .netPanel { margin-top: 8px; padding: 8px 10px; border: 2px dashed var(--ink-soft); border-radius: 10px; background: rgba(255,250,240,0.6); font-size: 17px; }
   .netPanel b#roomCode { font-family: 'Nanum Pen Script', cursive; font-weight: 400; font-size: 34px; color: var(--red); letter-spacing: 3px; vertical-align: middle; }
   .netPanel .small { font-size: 15px; color: var(--ink-soft); margin-top: 2px; }
@@ -312,6 +317,7 @@
 
   </div>
   <div class="lobbyFoot">
+    <div class="diffRow" id="diffRow"><span class="dl">난이도</span><button class="diffBtn" data-d="normal">🙂 보통</button><button class="diffBtn" data-d="hard">😠 어려움</button><button class="diffBtn" data-d="hell">😈 지옥</button></div>
     <div class="modeRow">
       <button class="modeBtn on" id="modeSolo">🧝 혼자</button>
       <button class="modeBtn" id="modeHost">🏠 방 만들기</button>
@@ -367,7 +373,10 @@
         <div><b>🧊 빙하</b> 미끄러워요 · <b>🌋 화산</b> 용암 뜨거움</div>
         <div><b>🐸 습지</b> 진흙에서 느려짐 · <b>🌴 정글</b> 독구름 조심</div>
         <div><b>🏜️ 사막</b> 숨은 지렁이 · 돌진 풍뎅이</div>
-        <div><b>체력 0</b> → 처음 시작한 곳에서 다시 태어나요</div>
+        <div><b>체력 0</b> → 시작한 곳에서 부활 (많이 쓰러질수록 늦게)</div>
+        <div><b>🌑 짙어지는 어둠</b> 3분마다 모든 적이 강해져요</div>
+        <div><b>🌑 어둠의 습격</b> 가끔 적 떼가 사방을 둘러싸요</div>
+        <div><b>🛡 녹스의 방어막</b> 어둠의 수정을 모두 부숴야 공격이 들어가요</div>
         <div><b>일시정지</b> <kbd>Esc</kbd> / <kbd>P</kbd> · <b>박스 접기</b> <kbd>H</kbd></div>
       </div>
     </div>
@@ -636,8 +645,18 @@ const ETYPES = {
   vine:     { name: '덩굴 어둠',   hp: 42,  spd: 65,  r: 18, dmg: 9,  xp: 4, color: '#1f4a24', eye: '#ffef6b', acc: 'leaf', ranged: true, shot: 'seed' },
   // 습지
   frog:     { name: '개구리 어둠', hp: 32,  spd: 0,   r: 15, dmg: 10, xp: 3, color: '#2d4a2a', eye: '#ffef6b', acc: 'frog', hopper: true },
+  crystal:  { name: '어둠의 수정', hp: 1600, spd: 0,   r: 30, dmg: 18, xp: 25, color: '#3a1060', eye: '#ff3b6b', ranged: true, shot: 'crystal' },
   bog:      { name: '진흙 어둠',   hp: 95,  spd: 50,  r: 25, dmg: 14, xp: 6, color: '#3b2f1f', eye: '#c7ff6b', acc: 'drip', mudTrail: true },
 };
+
+// ---------- 난이도 ----------
+const DIFFS = {
+  normal: { id: 'normal', name: '보통',   icon: '🙂', hp: 1.0,  dmg: 1.0, boss: 1.8, bossDmg: 1.3, lord: 30000, spd: 1.0,  horde: 200, elite: 60, heal: 1.0,  iframe: 0.35, respawn: 0 },
+  hard:   { id: 'hard',   name: '어려움', icon: '😠', hp: 1.35, dmg: 1.3, boss: 2.6, bossDmg: 1.7, lord: 45000, spd: 1.12, horde: 150, elite: 50, heal: 0.75, iframe: 0.28, respawn: 1 },
+  hell:   { id: 'hell',   name: '지옥',   icon: '😈', hp: 1.8,  dmg: 1.7, boss: 3.6, bossDmg: 2.2, lord: 70000, spd: 1.25, horde: 110, elite: 40, heal: 0.55, iframe: 0.22, respawn: 3 },
+};
+let DIFF = DIFFS.hard;
+let darkLevel = 0, darkT = 0, hordeT = 0;     // 시간이 지날수록 짙어지는 어둠 / 어둠의 습격
 
 // 지역마다 수호자(⭐별조각) 1마리 + 중간 보스(✦스킬 두루마리) 1마리
 const BOSS_DEFS = [
@@ -1214,12 +1233,13 @@ function useSkill(p, s) {
 function hurtPlayer(p, dmg) {
   if (Net.mode === 'client') return;
   if (p.dead || p.invuln > 0 || p.dashT > 0 || state !== 'play') return;
-  p.hp -= dmg; p.invuln = 0.35;
+  p.hp -= dmg; p.invuln = DIFF.iframe;
   addFloat({ x: p.x, y: p.y - 30, text: '-' + Math.round(dmg), color: '#ff5a67', t: 0, life: 0.8, size: 18 });
   sfx('hurt', p.x, p.y); burst(p.x, p.y - 6, '#ff5a67', 8, 160);
   if (p === local) { shake = Math.max(shake, 7); hurtVignette = 0.5; } else notify(p, 'V');
   if (p.hp <= 0) {
-    p.hp = 0; p.dead = true; p.respawnT = 4; p.deaths++; p.dashT = 0;
+    p.hp = 0; p.dead = true; p.deaths++; p.dashT = 0;
+    p.respawnT = 4 + DIFF.respawn + Math.min(10, (p.deaths - 1) * 1.5);   // 많이 쓰러질수록 부활이 늦어요
     burst(p.x, p.y, p.look.coat, 40, 260);
     notify(p, 'S', 'holly', p.name + '! 괜찮니?! 걱정 마, 별빛이 너를 시작 지점으로 데려다 줄 거야. 다시 힘내자!');
   }
@@ -1252,18 +1272,20 @@ function makeEnemy(type, x, y, zone, kind = 'mob') {
     seed: Math.random() * 10, hitCd: 0, flash: 0, slowT: 0, atk: rand(0.8, 2.2), blinkT: rand(2, 4), alpha: 1, uid: ++uidSeq,
   };
   if (kind === 'elite') { e.hp *= 8; e.r *= 1.8; e.dmg *= 1.4; e.spd *= 0.85; e.xp *= 6; e.name = '정예 ' + d.name; }
+  e.hp *= DIFF.hp * (1 + 0.1 * darkLevel); e.dmg *= DIFF.dmg * (1 + 0.08 * darkLevel);   // 난이도 + 짙어진 어둠
   e.maxHp = e.hp;
   return e;
 }
 function makeBoss(def) {
   return {
     kind: 'boss', type: def.id, id: def.id, name: def.name, who: def.who, x: def.x, y: def.y, homeX: def.x, homeY: def.y,
-    r: def.r, hp: def.hp, maxHp: def.hp, dmg: def.dmg, awake: false, dead: false, t: 0, st: 1.2, z: 0,
+    r: def.r, hp: def.hp, maxHp: def.hp, dmg: def.dmg * DIFF.bossDmg, awake: false, dead: false, t: 0, st: 1.2, z: 0,
     mode: 0, mt: 0, sub: 0, hops: 0, ang: 0, oa: 0, sa: 0, phase: 1, seed: Math.random() * 10,
     flash: 0, slowT: 0, hitCd: 0, face: 1, state: 'idle', enr: false, intro: false, atk: 1, uid: ++uidSeq,
   };
 }
 function ebullet(x, y, a, spd, dmg, r = 7, color = '#b04cff', extra) {
+  spd *= DIFF.spd;
   ebullets.push(Object.assign({ x, y, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, r, dmg, life: 3.2, color }, extra || {}));
 }
 function ring(x, y, n, spd, dmg, off = 0, r = 7, color) {
@@ -1282,6 +1304,11 @@ function summon(x, y, n, types, zone, rad = 90) {
 
 function damageEnemy(e, dmg, src) {
   if (e.dead) return;
+  if (e.shielded) {
+    if (Math.random() < 0.25) addFloat({ x: e.x + rand(-20, 20), y: e.y - e.r - 30, text: '🛡 막힘', color: '#c77dff', t: 0, life: 0.6, size: 16 });
+    sfx('hit', e.x, e.y);
+    return;
+  }
   e.hp -= dmg; e.flash = 0.08;
   if (e.kind === 'boss' && !e.awake) wakeBoss(e);
   const big = dmg >= 40;
@@ -1305,7 +1332,7 @@ function killEnemy(e, src) {
   const orbs = Math.min(12, Math.ceil(e.xp / 3));
   for (let i = 0; i < orbs; i++) pickups.push({ type: 'xp', x: e.x + rand(-e.r, e.r), y: e.y + rand(-e.r, e.r), v: e.xp / orbs, t: 0 });
   const luck = killer ? killer.luck : 1;
-  if (e.kind === 'mob' && Math.random() < 0.05 * luck) pickups.push({ type: 'cookie', x: e.x, y: e.y, t: 0 });
+  if (e.kind === 'mob' && Math.random() < 0.05 * luck * DIFF.heal) pickups.push({ type: 'cookie', x: e.x, y: e.y, t: 0 });
   if (e.type === 'splitter' && e.kind !== 'boss') {
     for (let i = 0; i < (e.kind === 'elite' ? 5 : 2); i++) enemies.push(makeEnemy('mini', e.x + rand(-20, 20), e.y + rand(-20, 20), e.zone));
   }
@@ -1377,6 +1404,7 @@ function updateEnemy(e, dt) {
   const spd = e.spd * (e.slowT > 0 ? 0.45 : 1);
   const T = ETYPES[e.type];
   const a2t = Math.atan2(dy, dx);
+  if (e.homeX !== undefined && T.shot === 'crystal') { e.x = e.homeX; e.y = e.homeY; }
   if (T.ranged) {
     const want = d > 300 ? 1 : d < 200 ? -0.7 : 0;
     e.x += dx / d * spd * want * dt; e.y += dy / d * spd * want * dt;
@@ -1384,7 +1412,8 @@ function updateEnemy(e, dt) {
     if (e.atk <= 0 && d < 520) {
       e.atk = e.kind === 'elite' ? 1.1 : 2.2;
       const many = e.kind === 'elite';
-      if (T.shot === 'ice3') for (let k = -1; k <= 1; k++) ebullet(e.x, e.y, a2t + k * (many ? 0.12 : 0.22), 300, e.dmg * 0.7, 6, '#bfe9ff');
+      if (T.shot === 'crystal') { ring(e.x, e.y, 12, 200, e.dmg * 0.7, gtime, 8, '#ff3b6b'); ebullet(e.x, e.y, a2t, 330, e.dmg, 9, '#b04cff'); }
+      else if (T.shot === 'ice3') for (let k = -1; k <= 1; k++) ebullet(e.x, e.y, a2t + k * (many ? 0.12 : 0.22), 300, e.dmg * 0.7, 6, '#bfe9ff');
       else if (T.shot === 'seed') { for (let k = 0; k < (many ? 4 : 2); k++) ebullet(e.x, e.y, a2t + rand(-0.25, 0.25), rand(170, 240), e.dmg * 0.8, 8, '#9be15d'); }
       else if (many) for (let k = -2; k <= 2; k++) ebullet(e.x, e.y, a2t + k * 0.18, 260, e.dmg * 0.8, 8, '#a6ff4d');
       else ebullet(e.x, e.y, a2t, 260, e.dmg * 0.9, 7, '#a6ff4d');
@@ -1490,6 +1519,18 @@ function bossHop(b, tgt, dt, dur, height, homeR, idleT, onLand) {
   if (k >= 1) { b.z = 0; b.state = 'idle'; b.st = idleT; b.hops++; onLand(); }
 }
 
+function spawnCrystals(b, ph) {
+  const n = ph + 1, hp = 1600 * DIFF.hp * (1 + 0.4 * (players.length - 1)) * (1 + 0.25 * (ph - 2));
+  for (let i = 0; i < n; i++) {
+    const a = i / n * Math.PI * 2 + ph;
+    const e = makeEnemy('crystal', CX + Math.cos(a) * 430, CY + Math.sin(a) * 330, 1);
+    e.hp = e.maxHp = Math.round(hp); e.dmg = 18 * DIFF.dmg * (1 + 0.15 * ph);
+    e.summoned = true; e.homeX = e.x; e.homeY = e.y;
+    enemies.push(e);
+    burst(e.x, e.y, '#b04cff', 24, 260); shock(e.x, e.y, '#b04cff', 120, 0.5, 6);
+  }
+  toastAll('🛡 녹스가 방어막을 쳤어요! 어둠의 수정 ' + n + '개를 모두 부숴요!', '#c77dff');
+}
 function bossTarget(b) { return nearestPlayer(b.x, b.y, 1600); }
 function keepHome(b, R) {
   const d = dist(b.x, b.y, b.homeX, b.homeY);
@@ -1505,10 +1546,11 @@ function moveToward(b, tx, ty, spd, dt) {
 function updateBoss(b, dt) {
   const tgt = bossTarget(b);
   if (!b.awake) {
+    b.hp = Math.min(b.maxHp, b.hp + b.maxHp * 0.03 * dt);              // 도망가면 보스 체력이 다시 차요
     if (nearestPlayer(b.x, b.y, 620)) wakeBoss(b);
     return;
   }
-  if (!tgt) { b.awake = false; b.z = 0; b.state = 'idle'; return; }    // 아무도 없으면 잠듦 (체력은 유지)
+  if (!tgt) { b.awake = false; b.z = 0; b.state = 'idle'; b.burrowed = false; return; }    // 아무도 없으면 잠듦
   b.t += dt;
   const hpR = b.hp / b.maxHp;
   if (!b.enr && hpR < 0.5 && b.id !== 'lord') {
@@ -1615,20 +1657,24 @@ function updateBoss(b, dt) {
   }
 
   if (b.id === 'lord') {
-    const ph = hpR > 0.66 ? 1 : hpR > 0.33 ? 2 : 3;
-    if (ph !== b.phase) {
+    const ph = hpR > 0.66 ? 1 : hpR > 0.33 ? 2 : hpR > 0.15 ? 3 : 4;
+    if (ph > b.phase) {
       b.phase = ph;
-      if (ph === 2) sayAll('nox', '크윽… 아직이다! 어둠이여, 더 몰려와라!');
-      if (ph === 3) sayAll('nox', '이럴 수가… 빛이 돌아오고 있어…! 아니, 함께 사라져라!!');
+      if (ph === 2) sayAll('nox', '크윽… 아직이다! 어둠의 수정이여, 나를 지켜라!');
+      if (ph === 3) sayAll('nox', '이럴 수가… 빛이 돌아오고 있어…! 수정이여, 더 단단해져라!!');
+      if (ph === 4) sayAll('nox', '마지막이다… 이 세상과 함께 어둠 속으로 사라져라!!!');
+      spawnCrystals(b, ph);
       ring(b.x, b.y, 36, 260, dmg * 0.6, 0, 9, '#ff3b6b');
       shake = 14; sfx('roar'); flashScreen('#ff3b6b', 0.35); shock(b.x, b.y, '#ff3b6b', 600, 0.8, 12);
     }
+    b.shielded = enemies.some(e => e.type === 'crystal' && !e.dead);
     b.oa += dt * (0.25 + 0.1 * ph);
     moveToward(b, CX + Math.cos(b.oa) * 260, CY - 60 + Math.sin(b.oa) * 200, 200, dt);
     const lists = [null,
       ['radial', 'aimed', 'spiral', 'summon'],
       ['radial', 'spiral', 'aimed', 'rain', 'summon'],
-      ['spiral', 'rain', 'radial', 'aimed', 'rain', 'summon']];
+      ['spiral', 'rain', 'radial', 'aimed', 'rain', 'summon'],
+      ['spiral', 'rain', 'aimed', 'radial', 'rain', 'spiral', 'summon']];
     const L = lists[ph];
     const m = L[b.mode % L.length];
     b.mt += dt; b.sub -= dt;
@@ -1652,7 +1698,7 @@ function updateBoss(b, dt) {
         for (const p of alivePlayers()) hazards.push({ x: p.x + rand(-60, 60), y: p.y + rand(-60, 60), r: 80, t: 0, delay: 0.9, dmg: dmg * 1.1, team: 'enemy', color: '#b04cff' });
       }
     }
-    if (b.mt > dur + [0, 0.7, 0.5, 0.35][ph]) { b.mode++; b.mt = 0; b.sub = 0; b.did = false; }
+    if (b.mt > dur + [0, 0.7, 0.5, 0.35, 0.2][ph]) { b.mode++; b.mt = 0; b.sub = 0; b.did = false; }
   }
 
   if (b.id === 'golem') {
@@ -1818,6 +1864,7 @@ function startGame(opts) {
   store('elf_name', name); store('elf_look', String(selectedLook));
   const multi = Net.mode !== 'solo';
   if (Net.mode === 'client' && opts) {
+    if (opts.diff) DIFF = DIFFS[opts.diff] || DIFF;
     players = opts.players.map(o => { const q = makePlayer(o.id, clamp(o.look | 0, 0, LOOKS.length - 1), o.name); q.x = q.spawnX = o.x; q.y = q.spawnY = o.y; return q; });
     local = players.find(q => q.id === Net.myId) || players[0];
   } else if (Net.mode === 'host') {
@@ -1840,14 +1887,15 @@ function startGame(opts) {
   fxTimers = []; screenFlashA = 0; hitStopT = 0;
   gifts = []; scrolls = [];
   for (const k in bossDefeated) delete bossDefeated[k];
-  runTime = 0; spawnT = 0; graceT = 4; eliteT = 70; teamShards = 0;
+  runTime = 0; spawnT = 0; graceT = 4; eliteT = DIFF.elite; teamShards = 0;
+  darkLevel = 0; darkT = 0; hordeT = DIFF.horde;
   finalStarted = false; finalBoss = null; endingT = 0; treeLight = 0; barrierMsgT = 0; barrierBreak = 0;
   Object.assign(tut, { step: 0, moved: 0, shots: 0, kills: 0, dashed: 0, gifts: 0, done: false });
   if (multi) Object.assign(tut, { step: 5, done: true });       // 친구들과 할 땐 튜토리얼은 건너뛰어요
 
   if (Net.mode !== 'client') {
     const scale = 1 + 0.35 * (players.length - 1);               // 인원이 많을수록 보스가 튼튼해져요
-    for (const d of BOSS_DEFS) { const b = makeBoss(d); b.hp = b.maxHp = d.hp * scale; enemies.push(b); }
+    for (const d of BOSS_DEFS) { const b = makeBoss(d); b.hp = b.maxHp = Math.round(d.hp * DIFF.boss * scale); enemies.push(b); }
     // 선물상자 흩뿌리기 (트리에 가까울수록 좋은 선물)
     for (let i = 0; i < 140; i++) {
       const a = Math.random() * Math.PI * 2, d = rand(650, 4300);
@@ -1868,6 +1916,7 @@ function startGame(opts) {
   state = 'play'; paused = false;
   const sb = biomeAt(local.x, local.y);
   local.seen[sb.id] = true;
+  say('spark', DIFF.icon + ' 「' + DIFF.name + '」 난이도야! 시간이 지날수록 어둠이 짙어지고, 가끔 「어둠의 습격」이 몰려와. 보스한테서 도망치면 보스 체력이 다시 차니까 조심해!');
   if (multi) {
     say('holly', local.name + '! 친구들과 함께 왔구나! 다 같이 힘을 모으면 어둠도 무섭지 않단다. (' + players.length + '명)');
     say('holly', '⭐별조각 ' + SHARDS + '개가 여섯 지역 — 눈 숲, 빙하, 화산, 사막, 정글, 습지로 날아갔어. 지역마다 어둠의 수호자가 지키고 있지.');
@@ -1883,7 +1932,7 @@ function startGame(opts) {
   }
   if (Net.mode === 'host') {
     Net.events = []; Net.targeted = {}; Net.giftSig = -1; Net.sendT = 0;
-    hostBroadcast({ t: 'start', players: players.map(q => ({ id: q.id, name: q.name, look: LOOKS.indexOf(q.look), x: Math.round(q.x), y: Math.round(q.y) })), gifts: gifts.map(g => [Math.round(g.x), Math.round(g.y), 0, g.rich ? 1 : 0]) });
+    hostBroadcast({ t: 'start', diff: DIFF.id, players: players.map(q => ({ id: q.id, name: q.name, look: LOOKS.indexOf(q.look), x: Math.round(q.x), y: Math.round(q.y) })), gifts: gifts.map(g => [Math.round(g.x), Math.round(g.y), 0, g.rich ? 1 : 0]) });
   }
   renderObjectives();
 }
@@ -1938,11 +1987,39 @@ function spawner(dt) {
       enemies.push(makeEnemy(pickMobType(x, y), x, y, sz));
     }
   }
+  // 시간이 지날수록 어둠이 짙어지고, 가끔 어둠의 습격이 와요
+  if (tut.done && !finalStarted) {
+    darkT += dt;
+    if (darkT >= 180 && darkLevel < 6) {
+      darkT = 0; darkLevel++;
+      toastAll('🌑 어둠이 더 짙어졌어요! 모든 적이 강해져요 (' + darkLevel + '단계)', '#c77dff');
+      sfx('roar'); flashScreen('#2a1040', 0.35);
+    }
+    hordeT -= dt;
+    if (hordeT <= 0) {
+      hordeT = DIFF.horde;
+      for (const p of alivePlayers()) {
+        const z = zoneAt(p.x, p.y), n = 8 + z * 2 + darkLevel;
+        for (let i = 0; i < n; i++) {
+          const a = i / n * Math.PI * 2;
+          const x = clamp(p.x + Math.cos(a) * 440, 80, W - 80), y = clamp(p.y + Math.sin(a) * 440, 80, H - 80);
+          if (dist(x, y, CX, CY) < BARRIER_R + 60) continue;
+          const e = makeEnemy(pickMobType(x, y), x, y, zoneAt(x, y));
+          e.summoned = true;
+          enemies.push(e);
+          burst(x, y, '#5a2d8c', 8, 120);
+        }
+        shock(p.x, p.y, '#5a2d8c', 460, 0.8, 8);
+      }
+      toastAll('🌑 어둠의 습격! 사방에서 몰려와요!', '#ff5a67');
+      sfx('roar'); flashScreen('#3a1050', 0.4);
+    }
+  }
   // 떠도는 정예 어둠 (미니 보스)
   if (tut.done && !finalStarted) {
     eliteT -= dt;
     if (eliteT <= 0) {
-      eliteT = 75;
+      eliteT = DIFF.elite;
       const p = pick(alivePlayers());
       if (p) {
         const a = Math.random() * Math.PI * 2;
@@ -1986,7 +2063,7 @@ function openGift(p, g) {
       msg = '🎁 ' + WEAPONS[w.type].icon + ' ' + WEAPONS[w.type].name + ' 강화! Lv.' + w.lvl;
     } else { p.maxHp += 20; p.hp += 20; msg = '🎁 💖 최대 체력 +20!'; }
   } else if (r < 0.84) {
-    const h = p.maxHp * (0.4 + 0.1 * p.luck);
+    const h = p.maxHp * (0.4 + 0.1 * p.luck) * DIFF.heal;
     p.hp = Math.min(p.maxHp, p.hp + h);
     msg = '🎁 🍪 진저브레드 쿠키! 체력 회복';
   } else {
@@ -2033,7 +2110,7 @@ function updatePickups(dt) {
     k.dead = true;
     if (k.type === 'xp') { gainXp(p, k.v); sfx('xp', p.x, p.y); glowPuff(p.x, p.y - 8, '#fff3a0', 10, 0.15); }
     if (k.type === 'cookie') {
-      const h = 25 * (p.luck > 1 ? 1.5 : 1);
+      const h = 25 * (p.luck > 1 ? 1.5 : 1) * DIFF.heal;
       p.hp = Math.min(p.maxHp, p.hp + h); sfx('cookie', p.x, p.y);
       addFloat({ x: p.x, y: p.y - 30, text: '+' + Math.round(h) + ' 🍪', color: '#7dffa8', t: 0, life: 0.9, size: 17 });
     }
@@ -2072,7 +2149,7 @@ function checkFinal() {
   burst(CX, CY, '#ffd166', 80, 500);
   sayAll('narr', '별조각 ' + SHARDS + '개가 하늘로 솟구치자 어둠의 장벽이 와장창 깨졌어요! 그 순간, 트리 뒤에서 거대한 그림자가 일어섰어요…');
   finalBoss = makeBoss(FINAL_DEF);
-  finalBoss.hp = finalBoss.maxHp = FINAL_DEF.hp * (1 + 0.5 * (players.length - 1));
+  finalBoss.hp = finalBoss.maxHp = DIFF.lord * (1 + 0.5 * (players.length - 1));
   enemies.push(finalBoss);
   for (const e of enemies) if (e.kind === 'mob' && dist(e.x, e.y, CX, CY) < 900) e.dead = true;
   setTimeout(() => { if (finalBoss && !finalBoss.dead) wakeBoss(finalBoss); }, 1200);
@@ -2998,6 +3075,7 @@ function netLeave() {
   if (Net.link) { try { Net.link.close(); } catch (e) { /* 무시 */ } }
   Object.assign(Net, { mode: 'solo', myId: 0, code: '', link: null, host: null, roster: [], events: [], targeted: {}, nextPid: 1, giftSig: -1, lastSnap: 0 });
   updateNetUI();
+  if (el('diffRow')) setDiff(store('elf_diff') || DIFF.id);
 }
 const NET_ERR = {
   'peer-unavailable': '그 코드의 방을 찾을 수 없어요. 코드를 다시 확인해 주세요.',
@@ -3076,10 +3154,10 @@ function hostLobbyTick(dt) {
   if (Net.lobT > 0) return;
   Net.lobT = 0.1;
   const list = Net.roster.map(r => ({ pid: r.pid, name: r.name, look: r.look, fx: +r.fx.toFixed(3), fy: +r.fy.toFixed(3), face: r.face, walk: +r.walk.toFixed(2), moving: r.moving }));
-  hostBroadcast({ t: 'roster', list });
+  hostBroadcast({ t: 'roster', list, diff: DIFF.id });
 }
 function encEnemy(e) {
-  const fl = (e.kind === 'elite' ? 1 : 0) | (e.burrowed ? 2 : 0) | (e.slowT > 0 ? 4 : 0) | (e.flash > 0 ? 8 : 0) | (e.fuse ? 16 : 0) | (e.cstate === 'wind' ? 32 : 0) | (e.awake ? 64 : 0) | (e.enr ? 128 : 0);
+  const fl = (e.kind === 'elite' ? 1 : 0) | (e.burrowed ? 2 : 0) | (e.slowT > 0 ? 4 : 0) | (e.flash > 0 ? 8 : 0) | (e.fuse ? 16 : 0) | (e.cstate === 'wind' ? 32 : 0) | (e.awake ? 64 : 0) | (e.enr ? 128 : 0) | (e.shielded ? 256 : 0);
   const a = [e.uid, e.type, Math.round(e.x), Math.round(e.y), Math.round(e.z || 0), Math.round(e.hp), Math.round(e.maxHp), +e.r.toFixed(1), fl];
   if (e.kind === 'boss') a.push(e.state, +(e.ang || 0).toFixed(2), e.face || 1, e.phase || 1, +(e.t || 0).toFixed(2), e.name);
   else if (e.cstate === 'wind') a.push(+(e.cang || 0).toFixed(2));
@@ -3188,6 +3266,7 @@ function clientOnData(d) {
       if (old) { r.dfx = old.dfx; r.dfy = old.dfy; }
     }
     Net.roster = d.list; updateNetUI();
+    if (d.diff && d.diff !== DIFF.id) setDiff(d.diff);
   } else if (d.t === 'start') {
     el('overlay').classList.remove('on');
     startGame(d);
@@ -3247,7 +3326,7 @@ function clientSnap(d) {
     }
     e.tx = x; e.ty = y; e.z = z; e.hp = hp; e.maxHp = maxHp; e.r = r;
     e.burrowed = !!(fl & 2); e.slowT = fl & 4 ? 1 : 0; if (fl & 8) e.flash = 0.08; e.fuse = fl & 16 ? 0.3 : 0;
-    e.cstate = fl & 32 ? 'wind' : ''; e.awake = !!(fl & 64); e.enr = !!(fl & 128);
+    e.cstate = fl & 32 ? 'wind' : ''; e.awake = !!(fl & 64); e.enr = !!(fl & 128); e.shielded = !!(fl & 256);
     if (e.kind === 'boss') { [e.state, e.ang, e.face, e.phase, e.t, e.name] = a.slice(9); if (e.id === 'lord') finalBoss = e; }
     else if (e.cstate === 'wind') e.cang = a[9];
     next.push(e);
@@ -3689,6 +3768,22 @@ function drawPlayer(p) {
 function drawSlime(e) {
   const c = ctx, r = e.r, wob = Math.sin(gtime * 6 + e.seed) * 0.08;
   const T = ETYPES[e.type] || {};
+  if (e.type === 'crystal') {
+    const c2 = ctx, r2 = e.r, fl2 = Math.sin(gtime * 3 + e.seed) * 5;
+    c2.save(); c2.translate(e.x, e.y);
+    c2.fillStyle = 'rgba(20,10,40,0.3)'; c2.beginPath(); c2.ellipse(0, r2 * 0.9, r2, r2 * 0.3, 0, 0, Math.PI * 2); c2.fill();
+    c2.translate(0, fl2 - 10);
+    c2.shadowColor = '#b04cff'; c2.shadowBlur = 20;
+    c2.fillStyle = e.flash > 0 ? '#ffffff' : '#4a1d7a';
+    c2.beginPath(); c2.moveTo(0, -r2 * 1.5); c2.lineTo(r2 * 0.7, 0); c2.lineTo(0, r2 * 1.1); c2.lineTo(-r2 * 0.7, 0); c2.closePath(); c2.fill();
+    c2.shadowBlur = 0;
+    c2.fillStyle = '#c77dff'; c2.beginPath(); c2.moveTo(0, -r2 * 1.5); c2.lineTo(r2 * 0.25, 0); c2.lineTo(0, r2 * 1.1); c2.closePath(); c2.fill();
+    c2.strokeStyle = UI.ink; c2.lineWidth = 2; c2.beginPath(); c2.moveTo(0, -r2 * 1.5); c2.lineTo(r2 * 0.7, 0); c2.lineTo(0, r2 * 1.1); c2.lineTo(-r2 * 0.7, 0); c2.closePath(); c2.stroke();
+    c2.fillStyle = '#ff3b6b'; circle(c2, 0, -r2 * 0.1, 4 + Math.sin(gtime * 6) * 1.5); c2.fill();
+    c2.restore();
+    hpBar(e.x, e.y - r2 * 1.9 - 10, 60, e.hp / e.maxHp, '#c77dff');
+    return;
+  }
   if (e.burrowed) {
     // 땅속에 숨은 모래 지렁이: 흙더미만 보임
     c.save(); c.translate(e.x, e.y);
@@ -4052,6 +4147,18 @@ function drawBoss(b) {
     c.strokeStyle = '#1a1a10'; c.lineWidth = 3; c.beginPath(); c.moveTo(-r * 0.7, r * 0.1); c.quadraticCurveTo(0, r * 0.35, r * 0.7, r * 0.1); c.stroke();
     c.fillStyle = '#ff6fa8'; c.beginPath(); c.ellipse(0, r * 0.75, r * 0.5, r * 0.18, 0, 0, Math.PI * 2); c.fill();
   } else if (b.id === 'lord') {
+    if (b.shielded) {
+      // 수정과 이어진 방어막
+      c.save();
+      c.strokeStyle = 'rgba(199,125,255,' + (0.5 + Math.sin(gtime * 8) * 0.25) + ')'; c.lineWidth = 3; c.setLineDash([10, 8]); c.lineDashOffset = -gtime * 60;
+      for (const e of enemies) if (e.type === 'crystal' && !e.dead) { c.beginPath(); c.moveTo(0, -20); c.lineTo(e.x - b.x, e.y - b.y + b.z - 10); c.stroke(); }
+      c.setLineDash([]);
+      const sg = c.createRadialGradient(0, -20, r * 0.8, 0, -20, r * 2);
+      sg.addColorStop(0, 'rgba(199,125,255,0)'); sg.addColorStop(1, 'rgba(199,125,255,0.45)');
+      c.fillStyle = sg; circle(c, 0, -20, r * 2); c.fill();
+      c.strokeStyle = 'rgba(230,200,255,0.8)'; c.lineWidth = 3; circle(c, 0, -20, r * 2); c.stroke();
+      c.restore();
+    }
     const fl = Math.sin(gtime * 2) * 8;
     c.translate(0, fl - 20);
     for (let i = 0; i < 6; i++) {
@@ -4661,6 +4768,8 @@ function drawHUDInner() {
     c.shadowBlur = 0;
     c.strokeStyle = UI.ink; c.lineWidth = 1.2; starPath(c, sx, 74, 10, 4.2); c.stroke();
   }
+  c.font = '17px sans-serif'; c.fillText(DIFF.icon, VW / 2 - 106, 80);
+  if (darkLevel) { c.font = FONT(15); c.fillStyle = '#6a3a8c'; c.fillText('🌑' + darkLevel, VW / 2 + 104, 80); }
 
   // 보스 체력바 (어두운 밤하늘 카드)
   let boss = null, bd = 1e9;
@@ -4844,8 +4953,8 @@ function buildLobby() {
   selectLook(isNaN(savedLook) ? 0 : clamp(savedLook, 0, 20));
   const savedName = store('elf_name');
   if (savedName) el('nameInput').value = savedName;
-  const best = parseFloat(store('elf_best'));
-  el('best').textContent = isNaN(best) ? '🏆 최고 기록: 아직 없음' : '🏆 최고 기록: ' + fmtTime(best);
+  document.querySelectorAll('.diffBtn').forEach(bt => bt.onclick = () => { if (Net.mode === 'client') return; sfx('click'); setDiff(bt.dataset.d); });
+  setDiff(store('elf_diff') || 'hard');
   el('startBtn').onclick = () => { if (Net.mode === 'client') return; audioInit(); sfx('click'); tryLandscape(); startGame(); };
   setupNetUI();
   el('musicBtn').onclick = () => { audioInit(); setMusic(!Snd.musicOn); };
@@ -5021,6 +5130,13 @@ function drawLobby(dt) {
 // =====================================================================
 //  일시정지 / 승리
 // =====================================================================
+function setDiff(id) {
+  DIFF = DIFFS[id] || DIFFS.hard;
+  if (Net.mode !== 'client') store('elf_diff', DIFF.id);
+  document.querySelectorAll('.diffBtn').forEach(bt => { bt.classList.toggle('on', bt.dataset.d === DIFF.id); bt.disabled = Net.mode === 'client'; });
+  const best = parseFloat(store('elf_best_' + DIFF.id));
+  el('best').textContent = isNaN(best) ? '🏆 ' + DIFF.name + ' 최고 기록: 아직 없음' : '🏆 ' + DIFF.name + ' 최고 기록: ' + fmtTime(best);
+}
 function cardHead(title) {
   return '<div class="cardHead night"><div class="mc">Merry Christmas</div><h2 class="neon">' + title + '</h2></div><div class="knit"></div>';
 }
@@ -5040,11 +5156,11 @@ function setPaused(v) {
 }
 function showWin() {
   state = 'win';
-  const prev = parseFloat(store('elf_best'));
+  const prev = parseFloat(store('elf_best_' + DIFF.id));
   const isBest = isNaN(prev) || runTime < prev;
-  if (isBest) store('elf_best', String(runTime));
+  if (isBest) store('elf_best_' + DIFF.id, String(runTime));
   showOverlay(cardHead('🎄 크리스마스를 되찾았다!') +
-    '<p class="soft">클리어 시간</p><p class="big">' + fmtTime(runTime) + '</p>' +
+    '<p class="soft">' + DIFF.icon + ' ' + DIFF.name + ' 난이도 클리어 시간</p><p class="big">' + fmtTime(runTime) + '</p>' +
     (isBest ? '<p class="good">🏆 새로운 최고 기록!</p>' : '<p>🏆 최고 기록: ' + fmtTime(prev) + '</p>') +
     '<p>🧝 ' + local.name + ' · Lv.' + local.level + ' · 👾 ' + local.kills + '마리 · 💫 ' + local.deaths + '번 쓰러짐</p>' +
     '<p class="soft">매일매일이 크리스마스가 되었어요! 🎅</p>' +
@@ -5066,8 +5182,7 @@ function backToLobby() {
   paused = false; state = 'lobby'; players = []; local = null;
   enemies = []; bullets = []; ebullets = []; hazards = []; allies = []; turrets = []; pickups = []; scrolls = [];
   el('lobby').style.display = '';
-  const best = parseFloat(store('elf_best'));
-  el('best').textContent = isNaN(best) ? '🏆 최고 기록: 아직 없음' : '🏆 최고 기록: ' + fmtTime(best);
+  setDiff(DIFF.id);
   story.queue = []; story.cur = null;
   say('spark', Net.mode === 'client' ? '로비로 돌아왔어! 방장이 다시 시작할 때까지 기다리자.' : '다시 모험을 떠날 준비가 되면 [게임 시작]을 눌러 줘!');
   renderObjectives();
