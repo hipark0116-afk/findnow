@@ -454,6 +454,7 @@ cvs.addEventListener('wheel', e => {
 function onKeyPress(code) {
   if (code === 'Enter') { nextStory(); return; }
   if (code === 'KeyH') { toggleStoryBox(); return; }
+  if (state === 'ending' && code === 'Escape') { skipEnding(); return; }
   if (state !== 'play') return;
   if (code === 'Escape' || code === 'KeyP') { setPaused(!paused); return; }
   if (paused || !local || local.dead) return;
@@ -1299,11 +1300,222 @@ function startEnding() {
   for (const e of enemies) if (!e.dead) { e.dead = true; burst(e.x, e.y, '#fff3a0', 8, 160); }
   ebullets = []; hazards = hazards.filter(h => h.team === 'ring');
   story.queue = []; story.cur = null;
-  say('narr', '녹스가 빛 속으로 사라지자, ⭐별조각 4개가 트리 꼭대기로 날아올랐어요.');
-  say('holly', '지금이야! 모두 함께 주문을! 「빛이여, 다시 깨어나라 — 매일이 크리스마스가 되도록!」');
-  say('narr', '트리가 다시 환하게 빛나고, 세계 곳곳에 흩어졌던 엘프들이 하나둘 집으로 돌아왔어요.');
-  say('narr', '그날부터 스노우벨 마을은 매일매일이 행복한 크리스마스가 되었답니다. 🎄 — 끝 —');
+  initCinematic();
   renderObjectives();
+}
+
+// =====================================================================
+//  엔딩 시네마틱: 트리 점등 → 먹구름 → 천둥 → 하늘이 열림 → 파란 레이저 → 영혼 구슬 승천 → 끝
+// =====================================================================
+const ss = t => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); };
+const CINE_END = 27;
+const BOLT_TIMES = [8.0, 8.6, 9.1, 9.7, 10.2, 10.7];
+const ENDING_LINES = [
+  { t: 0,    who: 'narr',  text: '녹스가 빛 속으로 사라지자, ⭐별조각 4개가 트리 꼭대기로 날아올랐어요.' },
+  { t: 2,    who: 'holly', text: '지금이야! 모두 함께 주문을! 「빛이여, 다시 깨어나라 — 매일이 크리스마스가 되도록!」' },
+  { t: 4.5,  who: 'narr',  text: '트리가 환하게 빛나던 그때… 하늘 위로 먹구름이 몰려오기 시작했어요.' },
+  { t: 8.1,  who: 'spark', text: '으앗, 천둥이야! 녹스가 아직 남아 있는 걸까?!' },
+  { t: 11,   who: 'narr',  text: '그 순간 — 구름이 갈라지며 하늘이 활짝 열렸어요!' },
+  { t: 13,   who: 'narr',  text: '열린 하늘에서 푸른 빛줄기가 트리 꼭대기로 곧게 내려왔어요.' },
+  { t: 15.3, who: 'holly', text: '저건… 오래전 처음으로 트리를 지켰던 두 엘프의 영혼이야. 트리 속에서 빛을 지키며 잠들어 있었단다.' },
+  { t: 17.5, who: 'narr',  text: '두 개의 빛나는 영혼 구슬이 서로를 감싸 돌며, 푸른 빛을 타고 하늘 높이 올라갔어요.' },
+  { t: 21.3, who: 'holly', text: '이제 편히 쉬렴… 앞으로는 우리가 트리를 지킬게.' },
+  { t: 23.3, who: 'narr',  text: '그날부터 스노우벨 마을은 매일매일이 행복한 크리스마스가 되었답니다. 🎄 — 끝 —' },
+];
+const SOUL_COLORS = ['#2fb4ff', '#ffc233'];
+const cine = { clouds: [], bolts: [], boltIdx: 0, lineIdx: 0, flash: 0, hit: false, ascend: false, trails: [[], []] };
+
+function initCinematic() {
+  cine.clouds = [];
+  for (let i = 0; i < 38; i++) {
+    const side = i % 2 ? 1 : -1;
+    cine.clouds.push({
+      side, tx: rand(-0.08, 1.08), ty: rand(-0.06, 0.26), r: rand(55, 120), ph: rand(0, 6),
+      sx: side > 0 ? rand(1.3, 1.7) : rand(-0.7, -0.3),
+    });
+  }
+  cine.bolts = []; cine.boltIdx = 0; cine.lineIdx = 0; cine.flash = 0;
+  cine.hit = false; cine.ascend = false; cine.trails = [[], []];
+}
+function sayNow(who, text) { story.queue = []; story.cur = null; say(who, text); }
+function starScreen() { return { x: CX - cam.x, y: CY - 310 - cam.y }; }
+function skyScreen() { return { x: VW / 2, y: VH * 0.07 }; }
+function makeBolt() {
+  const x0 = rand(0.15, 0.85) * VW, y0 = rand(0.04, 0.18) * VH, yEnd = rand(0.42, 0.62) * VH;
+  const pts = [[x0, y0]];
+  let x = x0, y = y0;
+  while (y < yEnd) { y += rand(18, 40); x += rand(-28, 28); pts.push([x, y]); }
+  const br = pts[Math.floor(pts.length / 2)], branch = [[br[0], br[1]]];
+  let bx = br[0], by = br[1];
+  for (let i = 0; i < 5; i++) { by += rand(15, 30); bx += rand(10, 30) * (x0 > VW / 2 ? -1 : 1); branch.push([bx, by]); }
+  return { t0: endingT, pts, branch };
+}
+function updateCinematic(dt) {
+  const T = endingT;
+  while (cine.lineIdx < ENDING_LINES.length && T >= ENDING_LINES[cine.lineIdx].t) {
+    const L = ENDING_LINES[cine.lineIdx++];
+    sayNow(L.who, L.text);
+  }
+  while (cine.boltIdx < BOLT_TIMES.length && T >= BOLT_TIMES[cine.boltIdx]) {
+    cine.boltIdx++;
+    cine.bolts.push(makeBolt());
+    cine.flash = 1; shake = Math.max(shake, 14);
+  }
+  cine.bolts = cine.bolts.filter(b => T - b.t0 < 0.35);
+  cine.flash = Math.max(0, cine.flash - dt * 2.5);
+  if (!cine.hit && T >= 14.2) {
+    cine.hit = true; cine.flash = 0.7; shake = Math.max(shake, 12);
+    burst(CX, CY - 310, '#7fd4ff', 50, 380); burst(CX, CY - 310, '#ffffff', 30, 260);
+  }
+  if (!cine.ascend && T >= 21) { cine.ascend = true; cine.flash = 1; }
+  if (T > 21.5 && Math.random() < 0.25) fireworks();
+}
+function soulPos(i, T) {
+  if (T < 15 || T >= 21) return null;
+  const st = starScreen(), sk = skyScreen();
+  if (T < 16.5) {
+    const a = ss((T - 15) / 1.2), ang = T * 3 + i * Math.PI;
+    return { x: st.x + Math.cos(ang) * 70 * a, y: st.y - 40 * a + Math.sin(ang) * 18 * a, s: a };
+  }
+  const k = ss((T - 16.5) / 4.5), ang = T * 2.6 + i * Math.PI, r = 70 * (1 - k) + 24;
+  return { x: lerp(st.x, sk.x, k) + Math.cos(ang) * r, y: lerp(st.y - 40, sk.y + 30, k) + Math.sin(ang) * r * 0.3, s: 1 - k * 0.3 };
+}
+function drawCloud(c, x, y, r, light) {
+  const g = c.createRadialGradient(x - r * 0.2, y - r * 0.3, r * 0.1, x, y, r);
+  g.addColorStop(0, light ? '#c9cfe8' : '#5c6180'); g.addColorStop(1, light ? '#8a90b0' : '#262a40');
+  c.fillStyle = g;
+  circle(c, x, y, r); c.fill();
+  circle(c, x - r * 0.8, y + r * 0.2, r * 0.7); c.fill();
+  circle(c, x + r * 0.8, y + r * 0.15, r * 0.75); c.fill();
+}
+function drawCinematic() {
+  const T = endingT, c = ctx;
+  const coverIn = ss((T - 4) / 3.5), coverOut = ss((T - 21.5) / 3);
+  const cover = coverIn * (1 - coverOut);
+  const open = ss((T - 11) / 2) * (1 - ss((T - 22) / 2.5));
+  const sk = skyScreen(), st = starScreen();
+  c.save();
+  // 폭풍으로 어두워지는 하늘
+  if (cover > 0) {
+    c.fillStyle = 'rgba(10,12,30,' + 0.5 * cover * (1 - open * 0.6) + ')';
+    c.fillRect(0, 0, VW, VH);
+  }
+  // 열린 하늘의 빛 (구름 뒤)
+  if (open > 0) {
+    const R = VW * 0.38 * open;
+    const g = c.createRadialGradient(sk.x, sk.y, 0, sk.x, sk.y, R);
+    g.addColorStop(0, 'rgba(255,255,255,0.9)'); g.addColorStop(0.3, 'rgba(160,220,255,0.55)'); g.addColorStop(1, 'rgba(120,180,255,0)');
+    c.fillStyle = g; circle(c, sk.x, sk.y, R); c.fill();
+    c.save(); c.translate(sk.x, sk.y); c.rotate(gtime * 0.15);
+    c.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 14; i++) {
+      c.rotate(Math.PI * 2 / 14);
+      c.fillStyle = 'rgba(200,235,255,' + 0.06 * open + ')';
+      c.beginPath(); c.moveTo(0, 0); c.lineTo(-22, VH * 0.9 * open); c.lineTo(22, VH * 0.9 * open); c.closePath(); c.fill();
+    }
+    c.restore();
+  }
+  // 먹구름
+  if (cover > 0) {
+    const R = VW * 0.26 * open;
+    c.globalAlpha = Math.min(1, cover * 1.4);
+    for (const cl of cine.clouds) {
+      let x = lerp(cl.sx, cl.tx, coverIn) * VW, y = cl.ty * VH + Math.sin(gtime + cl.ph) * 5;
+      if (coverOut > 0) x = lerp(x, (cl.tx + cl.side * 0.9) * VW, coverOut);
+      if (R > 0) {
+        const dx = x - sk.x, dy = y - sk.y, d = Math.hypot(dx, dy) || 1;
+        if (d < R + cl.r) { const push = R + cl.r - d; x += dx / d * push; y += dy / d * push * 0.4; }
+      }
+      drawCloud(c, x, y, cl.r, cine.flash > 0.5);
+    }
+    c.globalAlpha = 1;
+  }
+  // 번개
+  for (const b of cine.bolts) {
+    const a = 1 - (T - b.t0) / 0.35;
+    c.strokeStyle = 'rgba(255,255,255,' + a + ')'; c.shadowColor = '#9fd3ff'; c.shadowBlur = 25;
+    for (const [path, w] of [[b.pts, 5], [b.branch, 2.5]]) {
+      c.lineWidth = w; c.beginPath();
+      path.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y));
+      c.stroke();
+    }
+    c.shadowBlur = 0;
+  }
+  // 푸른 레이저
+  const bp = ss((T - 13) / 1.2), bfade = (1 - ss((T - 21) / 1.2)) * (1 - 0.35 * ss((T - 15) / 1.5));
+  if (bp > 0 && bfade > 0) {
+    const yEnd = lerp(sk.y, st.y, bp), w = (34 + Math.sin(gtime * 25) * 5) * bfade;
+    c.save(); c.globalCompositeOperation = 'lighter'; c.lineCap = 'round';
+    for (const [lw, col] of [[w * 3, 'rgba(30,90,255,' + 0.25 * bfade + ')'], [w * 1.6, 'rgba(50,140,255,' + 0.5 * bfade + ')'], [w * 0.8, 'rgba(110,190,255,' + 0.75 * bfade + ')'], [w * 0.3, 'rgba(225,245,255,' + bfade + ')']]) {
+      c.strokeStyle = col; c.lineWidth = lw;
+      c.beginPath(); c.moveTo(sk.x, sk.y); c.lineTo(st.x, yEnd); c.stroke();
+    }
+    for (let i = 0; i < 6; i++) {
+      const k = Math.random(), x = lerp(sk.x, st.x, k * bp) + rand(-w, w), y = lerp(sk.y, yEnd, k);
+      c.fillStyle = 'rgba(200,240,255,0.9)'; circle(c, x, y, rand(1.5, 3.5)); c.fill();
+    }
+    if (bp >= 1) {
+      const g = c.createRadialGradient(st.x, st.y, 0, st.x, st.y, 120 * bfade);
+      g.addColorStop(0, 'rgba(200,240,255,0.9)'); g.addColorStop(1, 'rgba(60,140,255,0)');
+      c.fillStyle = g; circle(c, st.x, st.y, 120 * bfade); c.fill();
+    }
+    c.restore();
+  }
+  // 두 개의 빛나는 영혼 구슬
+  for (let i = 0; i < 2; i++) {
+    const p = soulPos(i, T), tr = cine.trails[i];
+    if (p) { tr.push({ x: p.x, y: p.y }); if (tr.length > 26) tr.shift(); }
+    else if (tr.length) tr.shift();
+    c.save(); c.globalCompositeOperation = 'lighter';
+    tr.forEach((q, j) => {
+      c.fillStyle = SOUL_COLORS[i]; c.globalAlpha = (j / tr.length) * 0.35;
+      circle(c, q.x, q.y, 4 + j * 0.45); c.fill();
+    });
+    c.globalAlpha = 1;
+    c.restore();
+    if (p) {
+      const R = 30 * p.s * (1 + Math.sin(gtime * 6 + i) * 0.08);
+      c.save();
+      c.shadowColor = SOUL_COLORS[i]; c.shadowBlur = 40;
+      const g = c.createRadialGradient(p.x - R * 0.3, p.y - R * 0.3, 0, p.x, p.y, R);
+      g.addColorStop(0, '#ffffff'); g.addColorStop(0.35, SOUL_COLORS[i]); g.addColorStop(1, i ? '#b36b00' : '#0b4fa8');
+      c.fillStyle = g; circle(c, p.x, p.y, R); c.fill();
+      c.shadowBlur = 0;
+      c.strokeStyle = 'rgba(255,255,255,0.9)'; c.lineWidth = 2.5; circle(c, p.x, p.y, R + 4 + Math.sin(gtime * 8 + i) * 2); c.stroke();
+      for (let k = 0; k < 4; k++) {
+        const a = gtime * 3 + k * Math.PI / 2 + i;
+        drawStar(c, p.x + Math.cos(a) * (R + 14), p.y + Math.sin(a) * (R + 14), 5, 2, '#ffffff');
+      }
+      c.restore();
+    }
+  }
+  // 섬광
+  if (cine.flash > 0) { c.fillStyle = 'rgba(235,245,255,' + cine.flash * 0.75 + ')'; c.fillRect(0, 0, VW, VH); }
+  // 영화 같은 검은 띠
+  const lb = 46 * ss(T / 1.5);
+  c.fillStyle = '#000'; c.fillRect(0, 0, VW, lb); c.fillRect(0, VH - lb, VW, lb);
+  c.font = '14px Jua, sans-serif'; c.textAlign = 'right'; c.fillStyle = 'rgba(255,255,255,0.6)';
+  if (state === 'ending') c.fillText('Esc: 건너뛰기', VW - 16, lb - 16);
+  c.textAlign = 'left'; c.fillText('⏱ 클리어 ' + fmtTime(runTime), 16, lb - 16);
+  // 끝
+  if (T > 23) {
+    const a = ss((T - 23) / 1.5);
+    c.globalAlpha = a; c.textAlign = 'center';
+    c.font = '72px Jua, sans-serif'; c.lineWidth = 6; c.strokeStyle = 'rgba(20,20,60,0.7)';
+    c.shadowColor = '#ffd166'; c.shadowBlur = 30;
+    c.strokeText('🎄 끝 🎄', VW / 2, VH * 0.22); c.fillStyle = '#fff3c4'; c.fillText('🎄 끝 🎄', VW / 2, VH * 0.22);
+    c.shadowBlur = 0; c.font = '24px Jua, sans-serif'; c.lineWidth = 4;
+    c.strokeText('매일매일이 크리스마스가 되었답니다', VW / 2, VH * 0.22 + 46);
+    c.fillStyle = '#ffffff'; c.fillText('매일매일이 크리스마스가 되었답니다', VW / 2, VH * 0.22 + 46);
+  }
+  c.restore();
+}
+function skipEnding() {
+  endingT = Math.max(endingT, 26);
+  cine.lineIdx = ENDING_LINES.length; cine.boltIdx = BOLT_TIMES.length; cine.bolts = []; cine.flash = 0;
+  treeLight = 1;
+  sayNow('narr', ENDING_LINES[ENDING_LINES.length - 1].text);
+  showWin();
 }
 
 // =====================================================================
@@ -1417,14 +1629,14 @@ function update(dt) {
   if (state === 'ending') {
     endingT += dt;
     treeLight = Math.min(1, endingT / 4);
-    if (Math.random() < 0.25) fireworks();
-    if (endingT > 15 && state !== 'win') showWin();
+    updateCinematic(dt);
+    if (endingT > CINE_END && state !== 'win') showWin();
   }
 
   // 카메라
   if (local) {
     const ending = state === 'ending';
-    const tx = (ending ? CX : local.x) - VW / 2, ty = (ending ? CY - 120 : local.y) - VH / 2 + 60;
+    const tx = (ending ? CX : local.x) - VW / 2, ty = (ending ? CY - 120 - 200 * ss((endingT - 3) / 3) : local.y) - VH / 2 + 60;
     const k = Math.min(1, dt * (ending ? 1.5 : 8));
     cam.x = lerp(cam.x, tx, k); cam.y = lerp(cam.y, ty, k);
   }
@@ -1776,8 +1988,8 @@ function drawDecor(d) {
     for (let i = 0; i < 6; i++) { c.fillStyle = cc[i % 3]; circle(c, -40 + i * 16, -26, 4); c.fill(); }
   } else if (d.t === 'lamp') {
     c.fillStyle = '#2b2b3a'; c.fillRect(-2, -50, 4, 54);
-    c.fillStyle = state === 'ending' ? '#ffe9a0' : '#55506b'; rr(c, -7, -62, 14, 14, 3); c.fill();
-    if (state === 'ending') { c.fillStyle = 'rgba(255,220,120,0.25)'; circle(c, 0, -55, 30); c.fill(); }
+    c.fillStyle = treeLight > 0 ? '#ffe9a0' : '#55506b'; rr(c, -7, -62, 14, 14, 3); c.fill();
+    if (treeLight > 0) { c.fillStyle = 'rgba(255,220,120,0.25)'; circle(c, 0, -55, 30); c.fill(); }
   }
   c.restore();
 }
@@ -2326,7 +2538,8 @@ function frame(now) {
     ctx.fillStyle = '#0b1020'; ctx.fillRect(0, 0, VW, VH);
     drawWorld();
     drawSnow(paused ? 0 : dt, 0.7);
-    if (local) drawHUD();
+    if (state === 'ending' || state === 'win') drawCinematic();
+    else if (local) drawHUD();
     objT += dt;
     if (objT > 1 && el('paneGoal').classList.contains('on')) { objT = 0; renderObjectives(); }
   }
