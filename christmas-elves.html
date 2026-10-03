@@ -424,6 +424,12 @@
         <div><b>🌑 짙어지는 어둠</b> 3분마다 모든 적이 강해져요</div>
         <div><b>🌑 어둠의 습격</b> 가끔 적 떼가 사방을 둘러싸요</div>
         <div><b>🛡 녹스의 방어막</b> 어둠의 수정을 모두 부숴야 공격이 들어가요</div>
+        <div><b>🔥 콤보·피버</b> 쉬지 않고 물리치면 콤보! 30콤보마다 피버 타임</div>
+        <div><b>💥 치명타</b> 가끔 두 배 피해 (선물 카드로 확률 UP)</div>
+        <div><b>🎁 선물 카드</b> 레벨업마다 3장 중 1장 (<kbd>8</kbd><kbd>9</kbd><kbd>0</kbd> 또는 클릭)</div>
+        <div><b>🌨 세계 이벤트</b> 황금 눈 · 눈보라 · 산타 썰매 · 선물 도둑</div>
+        <div><b>😱 미믹</b> 가끔 선물상자가 괴물로 변해요!</div>
+        <div><b>🏆 업적</b> 🎯 목표 탭에서 모은 업적을 볼 수 있어요</div>
         <div><b>일시정지</b> <kbd>Esc</kbd> / <kbd>P</kbd> · <b>박스 접기</b> <kbd>H</kbd></div>
       </div>
     </div>
@@ -734,6 +740,8 @@ const SKILL_KEYS = { Space: 'dash', KeyQ: 'nova', KeyE: 'turret', KeyR: 'meteor'
 
 // ---------- 적 ----------
 const ETYPES = {
+  thief:    { name: '선물 도둑 그린치', hp: 420, spd: 205, r: 20, dmg: 0, xp: 40, color: '#4f8a2e', eye: '#ffd166', thief: true, acc: 'sack' },
+  mimic:    { name: '선물 미믹',   hp: 260, spd: 120, r: 24, dmg: 16, xp: 20, color: '#b3302a', eye: '#ffd166', mimic: true, acc: 'giftlid' },
   slime:    { name: '꼬마 어둠',   hp: 30,  spd: 85,  r: 16, dmg: 9,  xp: 2, color: '#2b1d4a', eye: '#ff4d8d' },
   mini:     { name: '아기 어둠',   hp: 12,  spd: 125, r: 10, dmg: 5,  xp: 1, color: '#3a2266', eye: '#ff4d8d' },
   fast:     { name: '재빠른 어둠', hp: 18,  spd: 175, r: 12, dmg: 7,  xp: 2, color: '#1d2b55', eye: '#4dd2ff' },
@@ -903,7 +911,12 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => { keys[e.code] = false; });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; mouse.down = false; });
 cvs.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
-cvs.addEventListener('mousedown', e => { if (e.button === 0) mouse.down = true; mouse.x = e.clientX; mouse.y = e.clientY; });
+cvs.addEventListener('mousedown', e => {
+  mouse.x = e.clientX; mouse.y = e.clientY;
+  const z = e.button === 0 && perkZones.find(z => inBox(z, e.clientX, e.clientY));
+  if (z) { choosePerk(z.i); return; }               // 선물 카드 누르기 (총은 안 쏴요)
+  if (e.button === 0) mouse.down = true;
+});
 addEventListener('mouseup', e => { if (e.button === 0) mouse.down = false; });
 cvs.addEventListener('contextmenu', e => e.preventDefault());
 cvs.addEventListener('wheel', e => {
@@ -924,6 +937,7 @@ function onKeyPress(code) {
     setPaused(!paused); return;
   }
   if (paused || !local || local.dead) return;
+  if (local.offers && (code === 'Digit8' || code === 'Digit9' || code === 'Digit0')) { choosePerk(code === 'Digit8' ? 0 : code === 'Digit9' ? 1 : 2); return; }
   if (SKILL_KEYS[code]) { if (Net.mode === 'client') clientSkill(SKILL_KEYS[code]); else useSkill(local, SKILL_KEYS[code]); }
   if (code === 'KeyT') { autoAim = !autoAim; toast(autoAim ? '🎯 자동 조준 켜짐 (T)' : '🖱 마우스 조준 (T)', '#9fd3ff'); }
   if (code.startsWith('Digit')) {
@@ -993,6 +1007,11 @@ function toggleStoryBox(auto) {
 el('toggleStory').onclick = () => toggleStoryBox();
 el('storyTicker').onclick = () => toggleStoryBox();
 
+function achHTML() {
+  const n = ACHS.filter(a => achDone[a[0]]).length;
+  return '<div style="margin-top:8px"><b style="color:var(--red)">🏆 업적 ' + n + '/' + ACHS.length + '</b><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:0 14px;font-size:16px">' +
+    ACHS.map(([id, icon, name, desc]) => '<div style="' + (achDone[id] ? '' : 'opacity:0.5') + '">' + (achDone[id] ? icon : '🔒') + ' ' + name + ' <span style="color:var(--ink-soft)">— ' + desc + '</span></div>').join('') + '</div></div>';
+}
 function renderObjectives() {
   const items = [];
   const line = (done, now, text) => items.push('<div class="' + (done ? 'done' : now ? 'now' : '') + '">' + (done ? '✅' : now ? '👉' : '⬜') + ' ' + text + '</div>');
@@ -1017,7 +1036,7 @@ function renderObjectives() {
     const learned = local ? SKILL_ORDER.filter(s => s !== 'dash' && local.skills[s]).length : 0;
     items.push('<div style="margin-top:6px;color:var(--ink-soft)">⏱ ' + fmtTime(runTime) + ' · ✦ 스킬 ' + learned + '/' + (SKILL_ORDER.length - 1) + ' · 🎁 ' + (Net.mode === 'client' ? gifts.filter(g => g.opened).length : giftsOpened) + '개 열기</div>');
   }
-  el('objList').innerHTML = items.join('');
+  el('objList').innerHTML = items.join('') + achHTML();
 }
 
 // =====================================================================
@@ -1111,6 +1130,10 @@ function updatePlayer(p, dt) {
   p.burnCd = Math.max(0, p.burnCd - dt);
   if (p.regen) p.hp = Math.min(p.maxHp, p.hp + p.regen * dt);
   if (p.regenBoost > 0) { p.regenBoost -= dt; p.hp = Math.min(p.maxHp, p.hp + p.maxHp * 0.045 * dt); }
+  if (Net.mode !== 'client') {
+    if (p.comboT > 0) { p.comboT -= dt; if (p.comboT <= 0) p.combo = 0; }
+    if (p.feverT > 0) p.feverT -= dt;
+  } else if (p.comboT > 0) p.comboT -= dt;
   if (p.remote) { updateRemotePlayer(p, dt); return; }   // 친구 엘프: 위치는 친구 컴퓨터에서 와요
 
   // 이동 (로컬 플레이어는 키보드 입력)
@@ -1132,7 +1155,7 @@ function updatePlayer(p, dt) {
     p.vx = p.dvx * 0.35; p.vy = p.dvy * 0.35;
     if (Math.random() < 0.8) particles.push({ x: p.x, y: p.y + 6, vx: rand(-30, 30), vy: rand(-30, 30), life: 0.35, max: 0.35, color: p.look.coat, size: rand(3, 6) });
   } else {
-    const spd = p.speed * ter.slow * (p.slowT > 0 ? 0.6 : 1);
+    const spd = p.speed * ter.slow * (p.slowT > 0 ? 0.6 : 1) * (p.feverT > 0 ? 1.15 : 1);
     const k = Math.min(1, (ter.ice ? 2.4 : 30) * dt);   // 빙판에서는 미끄러짐
     p.vx = lerp(p.vx, ix * spd, k); p.vy = lerp(p.vy, iy * spd, k);
     p.x += p.vx * dt; p.y += p.vy * dt;
@@ -1216,7 +1239,7 @@ function updateRemotePlayer(p, dt) {
 
 function fireWeapon(p) {
   const w = p.weapons[p.wIdx], d = WEAPONS[w.type];
-  p.fireCd = d.rate * p.rateMul * (w.lvl >= 4 ? 0.9 : 1);
+  p.fireCd = d.rate * p.rateMul * (w.lvl >= 4 ? 0.9 : 1) * (p.feverT > 0 ? 0.6 : 1);
   const dmg = d.dmg * (1 + 0.28 * (w.lvl - 1)) * p.dmgMul;
   for (let i = 0; i < d.count; i++) {
     const a = p.aim + (d.count > 1 ? (i / (d.count - 1) - 0.5) * d.spread : 0) + (Math.random() - 0.5) * d.jitter;
@@ -1252,7 +1275,7 @@ function useSkill(p, s) {
     if (p === local && tut.step === 3) tut.dashed++;
   }
   if (s === 'nova') {
-    p.cd.nova = SKILLS.nova.cd;
+    p.cd.nova = SKILLS.nova.cd * (p.cdMul || 1);
     const R = 240, dmg = 50 * p.dmgMul;
     for (let i = 0; i < 40; i++) {
       const a = i / 40 * Math.PI * 2;
@@ -1273,12 +1296,12 @@ function useSkill(p, s) {
     shake = Math.max(shake, 6);
   }
   if (s === 'turret') {
-    p.cd.turret = SKILLS.turret.cd;
+    p.cd.turret = SKILLS.turret.cd * (p.cdMul || 1);
     turrets.push({ x: p.x + Math.cos(p.aim) * 30, y: p.y + Math.sin(p.aim) * 30, t: 9, cd: 0, owner: p, aim: 0 });
     confetti(p.x + Math.cos(p.aim) * 30, p.y + Math.sin(p.aim) * 30, 20); sfx('gift', p.x, p.y);
   }
   if (s === 'meteor') {
-    p.cd.meteor = SKILLS.meteor.cd;
+    p.cd.meteor = SKILLS.meteor.cd * (p.cdMul || 1);
     let tx = mouse.x + cam.x, ty = mouse.y + cam.y;
     if (p !== local && p.netTarget) { tx = p.netTarget.x; ty = p.netTarget.y; }
     else if (autoAim || p !== local) { const t = nearestEnemy(p.x, p.y, 600); if (t) { tx = t.x; ty = t.y; } else { tx = p.x + Math.cos(p.aim) * 250; ty = p.y + Math.sin(p.aim) * 250; } }
@@ -1311,17 +1334,17 @@ function useSkill(p, s) {
       dmg *= 0.9;
     }
     if (pts.length < 2) { notify(p, 'T', '⚡ 근처에 적이 없어요', '#9fd3ff'); return; }
-    p.cd.chain = SKILLS.chain.cd;
+    p.cd.chain = SKILLS.chain.cd * (p.cdMul || 1);
     zaps.push({ pts, t: 0 }); rec(['z', Math.round(p.x), Math.round(p.y), pts.map(q => [Math.round(q[0]), Math.round(q[1])])]);
     shake = Math.max(shake, 4); sfx('zap', p.x, p.y); flashScreen('#d4f0ff', 0.18, p.x, p.y);
   }
   if (s === 'tornado') {
-    p.cd.tornado = SKILLS.tornado.cd;
+    p.cd.tornado = SKILLS.tornado.cd * (p.cdMul || 1);
     sfx('tornado', p.x, p.y);
     allies.push({ type: 'tornado', x: p.x + Math.cos(p.aim) * 40, y: p.y + Math.sin(p.aim) * 40, vx: Math.cos(p.aim) * 190, vy: Math.sin(p.aim) * 190, t: 4.5, tick: 0, r: 95, owner: p });
   }
   if (s === 'heal') {
-    p.cd.heal = SKILLS.heal.cd;
+    p.cd.heal = SKILLS.heal.cd * (p.cdMul || 1);
     for (const q of alivePlayers()) {
       if (dist(q.x, q.y, p.x, p.y) > 320) continue;
       const h = q.maxHp * 0.35;
@@ -1334,7 +1357,7 @@ function useSkill(p, s) {
     shock(p.x, p.y, '#7dffa8', 320, 0.6, 6); sfx('heal', p.x, p.y);
   }
   if (s === 'rudolph') {
-    p.cd.rudolph = SKILLS.rudolph.cd;
+    p.cd.rudolph = SKILLS.rudolph.cd * (p.cdMul || 1);
     const a = p.aim;
     allies.push({ type: 'rudolph', x: p.x - Math.cos(a) * 90, y: p.y - Math.sin(a) * 90, a, t: 1.25, hit: new Set(), dmg: 90 * p.dmgMul, owner: p, walk: 0 });
     burst(p.x, p.y, '#ff3b3b', 14, 180); sfx('rudolph', p.x, p.y);
@@ -1344,6 +1367,7 @@ function useSkill(p, s) {
 function hurtPlayer(p, dmg) {
   if (Net.mode === 'client') return;
   if (p.dead || p.invuln > 0 || p.dashT > 0 || state !== 'play') return;
+  dmg *= p.armor || 1;
   p.hp -= dmg; p.invuln = DIFF.iframe;
   addFloat({ x: p.x, y: p.y - 30, text: '-' + Math.round(dmg), color: '#ff5a67', t: 0, life: 0.8, size: 18 });
   sfx('hurt', p.x, p.y); burst(p.x, p.y - 6, '#ff5a67', 8, 160);
@@ -1356,7 +1380,235 @@ function hurtPlayer(p, dmg) {
   }
 }
 
+// =====================================================================
+//  더 재미있게! 콤보·피버 / 치명타 / 레벨업 선물 카드 / 세계 이벤트 / 업적
+// =====================================================================
+const UPGRADES = [
+  { id: 'atk',   icon: '⚔️', name: '날카로운 지팡이', desc: '공격력 +15%',          fn: p => { p.dmgMul += 0.15; } },
+  { id: 'rate',  icon: '⚡', name: '빠른 손놀림',     desc: '공격 속도 +12%',       fn: p => { p.rateMul *= 0.88; } },
+  { id: 'spd',   icon: '👢', name: '썰매 부츠',       desc: '이동 속도 +8%',        fn: p => { p.speed *= 1.08; } },
+  { id: 'hp',    icon: '💖', name: '따뜻한 스웨터',   desc: '최대 체력 +30',        fn: p => { p.maxHp += 30; p.hp += 30; } },
+  { id: 'crit',  icon: '💥', name: '반짝 행운',       desc: '치명타 확률 +7%',      fn: p => { p.crit = (p.crit || 0) + 0.07; } },
+  { id: 'vamp',  icon: '🍪', name: '쿠키 냠냠',       desc: '물리칠 때마다 체력 +2', fn: p => { p.vamp = (p.vamp || 0) + 2; } },
+  { id: 'mag',   icon: '🧲', name: '별빛 자석',       desc: '빛 조각 끌어오기 +60%', fn: p => { p.magnet = (p.magnet || 1) + 0.6; } },
+  { id: 'cd',    icon: '⏳', name: '모래시계 장식',   desc: '스킬 쿨타임 -10%',     fn: p => { p.cdMul = (p.cdMul || 1) * 0.9; p.dashCdMul *= 0.9; } },
+  { id: 'fever', icon: '🔥', name: '축제 기분',       desc: '피버 시간 +3초',       fn: p => { p.feverAdd = (p.feverAdd || 0) + 3; } },
+  { id: 'regen', icon: '🌿', name: '호랑가시 부적',   desc: '체력 자연 회복 +1/초', fn: p => { p.regen = (p.regen || 0) + 1; } },
+  { id: 'armor', icon: '🛡', name: '두꺼운 털모자',   desc: '받는 피해 -8%',        fn: p => { p.armor = (p.armor || 1) * 0.92; } },
+];
+const UPG = Object.fromEntries(UPGRADES.map(u => [u.id, u]));
+function rollOffers() {
+  const ids = UPGRADES.map(u => u.id), out = [];
+  while (out.length < 3) out.push(ids.splice(Math.floor(Math.random() * ids.length), 1)[0]);
+  return out;
+}
+function grantPick(p) { p.picks = (p.picks || 0) + 1; if (!p.offers) p.offers = rollOffers(); }
+function pickUpgrade(p, i) {
+  if (!p.offers || !p.offers[i]) return;
+  const u = UPG[p.offers[i]];
+  u.fn(p);
+  p.picks = Math.max(0, (p.picks || 1) - 1);
+  p.offers = p.picks > 0 ? rollOffers() : null;
+  sparkle(p.x, p.y - 20, '#ffd166', 14, 160); sfx('scroll', p.x, p.y);
+  notify(p, 'T', u.icon + ' ' + u.name + ' — ' + u.desc, '#ffd166');
+}
+function choosePerk(i) {
+  if (!local || !local.offers || state !== 'play' || paused) return;
+  if (Net.mode === 'client') { Net.host.send({ t: 'pk', i }); local.offers = null; local.pkWait = performance.now() + 500; sfx('scroll'); }
+  else pickUpgrade(local, i);
+}
+
+// ---------- 콤보 & 피버 타임 ----------
+function addCombo(p) {
+  p.combo = (p.comboT > 0 ? (p.combo || 0) : 0) + 1; p.comboT = 3;
+  p.maxCombo = Math.max(p.maxCombo || 0, p.combo);
+  if (p.combo % 30 === 0) startFever(p);
+  else if (p.combo === 10 || p.combo === 20 || p.combo % 50 === 0) addFloat({ x: p.x, y: p.y - 62, text: p.combo + ' COMBO!', color: '#ff9a3c', t: 0, life: 1.1, size: 22 });
+}
+function startFever(p) {
+  p.feverT = 8 + (p.feverAdd || 0); p.fevers = (p.fevers || 0) + 1;
+  addFloat({ x: p.x, y: p.y - 66, text: '🔥 FEVER TIME!', color: '#ff7b3c', t: 0, life: 1.6, size: 28 });
+  shock(p.x, p.y, '#ff9a3c', 220, 0.6, 7); sparkle(p.x, p.y - 20, '#ffd166', 18, 220); sfx('levelup', p.x, p.y);
+  notify(p, 'T', '🔥 피버 타임! ' + Math.round(p.feverT) + '초 동안 공격과 이동이 빨라져요', '#ff9a3c');
+  if (p === local) flashScreen('#ffcf80', 0.2);
+}
+
+// ---------- 세계 이벤트 ----------
+const WEVENTS = {
+  gold:     { name: '✨ 황금 눈이 내려요! 빛 조각(경험치) 2배', short: '✨ 황금 눈 · 경험치 x2', dur: 25, color: '#e8a93a' },
+  blizzard: { name: '❄ 눈보라가 몰아쳐요! 어둠들이 느려졌어요', short: '❄ 눈보라 · 적이 느려짐', dur: 20, color: '#7ec8e8' },
+  sleigh:   { name: '🛷 산타의 썰매가 지나가요! 떨어지는 선물을 주워요', short: '🛷 산타 썰매 · 선물 줍기', dur: 7, color: '#c8372d' },
+  thief:    { name: '💰 선물 도둑 그린치 등장! 도망가기 전에 잡아요', short: '💰 선물 도둑을 잡아라', dur: 25, color: '#4d7a3a' },
+};
+let worldEv = null, worldEvT = 100, sleighs = [];
+function updateWorldEvents(dt) {                 // 방장(혼자일 땐 내 컴퓨터)만
+  if (!tut.done || finalStarted) { if (worldEv && finalStarted) endWorldEvent(true); return; }
+  if (worldEv) { worldEv.t -= dt; if (worldEv.t <= 0) endWorldEvent(); return; }
+  worldEvT -= dt;
+  if (worldEvT <= 0) startWorldEvent(pick(Object.keys(WEVENTS)));
+}
+function startWorldEvent(id) {
+  const E = WEVENTS[id], ps = alivePlayers();
+  if (!ps.length) { worldEvT = 10; return; }
+  worldEv = { id, t: E.dur, dur: E.dur };
+  toastAll(E.name, E.color);
+  sfx('alert'); rec(['s', null, null, 'alert']);
+  if (id === 'sleigh') {
+    const q = pick(ps), a = Math.random() * Math.PI * 2;
+    const pts = [q.x - Math.cos(a) * 1300, q.y - Math.sin(a) * 1300 - 100, q.x + Math.cos(a) * 1300, q.y + Math.sin(a) * 1300 - 100].map(Math.round);
+    launchSleigh(pts, E.dur - 1); rec(['Y', null, null, pts, E.dur - 1]);
+    sayAll('holly', '호호호! 산타 할아버지의 썰매야! 선물을 떨어뜨려 주실 거란다, 어서 주우렴!');
+  }
+  if (id === 'thief') {
+    const q = pick(ps), a = Math.random() * Math.PI * 2;
+    const x = clamp(q.x + Math.cos(a) * 520, 120, W - 120), y = clamp(q.y + Math.sin(a) * 520, 120, H - 120);
+    const e = makeEnemy('thief', x, y, zoneAt(x, y)); e.escape = E.dur;
+    enemies.push(e); burst(x, y, '#9be15d', 24, 220);
+    sayAll('spark', '저기! 초록 도둑이 선물 자루를 메고 도망가! 잡으면 선물을 되찾을 수 있어!');
+  }
+  if (id === 'gold') sayAll('spark', '와아, 황금 눈이다! 지금 어둠을 물리치면 빛 조각을 두 배로 얻어!');
+  if (id === 'blizzard') sayAll('holly', '눈보라가 어둠들의 발을 묶었구나. 지금이 기회란다!');
+}
+function endWorldEvent(silent) {
+  const id = worldEv.id;
+  worldEv = null; worldEvT = rand(90, 135);
+  if (silent) return;
+  if (id === 'gold') toastAll('황금 눈이 그쳤어요', '#c9b6ff');
+  if (id === 'blizzard') toastAll('눈보라가 잦아들었어요', '#c9b6ff');
+}
+function launchSleigh(pts, dur) { sleighs.push({ x0: pts[0], y0: pts[1], x1: pts[2], y1: pts[3], dur, t0: gtime, drop: 0.3, x: pts[0], y: pts[1] }); }
+function updateSleighs(dt, host) {
+  for (const sl of sleighs) {
+    const k = (gtime - sl.t0) / sl.dur;
+    sl.x = lerp(sl.x0, sl.x1, k); sl.y = lerp(sl.y0, sl.y1, k) + Math.sin(k * 12) * 14;
+    if (Math.random() < 0.7) particles.push({ kind: 'glow', x: sl.x - Math.sign(sl.x1 - sl.x0) * 40, y: sl.y + rand(-6, 10), vx: rand(-20, 20), vy: rand(10, 50), g: 20, life: rand(0.5, 1), max: 1, color: pick(['#ffd166', '#fff3a0', '#ffffff']), size: rand(3, 6) });
+    if (host && k > 0.1 && k < 0.9) {
+      sl.drop -= dt;
+      if (sl.drop <= 0) {
+        sl.drop = 0.5;
+        const g = { x: clamp(sl.x + rand(-40, 40), 120, W - 120), y: clamp(sl.y + 110 + rand(-30, 30), 120, H - 120), opened: false, rich: Math.random() < 0.5 };
+        gifts.push(g); burst(g.x, g.y, '#ffd166', 10, 140);
+      }
+    }
+  }
+  sleighs = sleighs.filter(sl => gtime - sl.t0 < sl.dur);
+}
+function drawSleigh(sl) {
+  const c = ctx, dir = sl.x1 >= sl.x0 ? 1 : -1;
+  c.save();
+  c.fillStyle = 'rgba(20,30,70,0.18)'; c.beginPath(); c.ellipse(sl.x, sl.y + 120, 70, 12, 0, 0, Math.PI * 2); c.fill();
+  c.translate(sl.x, sl.y); c.scale(dir, 1);
+  // 루돌프 두 마리
+  for (const [ox, oy] of [[70, 4], [112, -6]]) {
+    const b = Math.sin(gtime * 14 + ox) * 3;
+    c.fillStyle = '#9a6235'; c.beginPath(); c.ellipse(ox, oy + b, 17, 9, 0, 0, Math.PI * 2); c.fill();
+    c.fillRect(ox - 12, oy + b + 5, 4, 12); c.fillRect(ox + 8, oy + b + 5, 4, 12);
+    c.beginPath(); c.ellipse(ox + 18, oy + b - 10, 8, 7, 0, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = '#5c3a1c'; c.lineWidth = 2; c.beginPath(); c.moveTo(ox + 15, oy + b - 16); c.lineTo(ox + 11, oy + b - 26); c.moveTo(ox + 13, oy + b - 22); c.lineTo(ox + 7, oy + b - 24); c.stroke();
+    c.fillStyle = ox === 112 ? '#ff3b3b' : '#3b2416'; circle(c, ox + 26, oy + b - 9, 3); c.fill();
+  }
+  c.strokeStyle = '#e8a93a'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(40, 4); c.lineTo(62, 4); c.stroke();
+  // 썰매
+  c.fillStyle = '#c8372d'; c.beginPath(); c.moveTo(-46, -14); c.lineTo(40, -14); c.quadraticCurveTo(46, 10, 30, 14); c.lineTo(-40, 14); c.quadraticCurveTo(-56, 0, -46, -14); c.closePath(); c.fill();
+  c.fillStyle = '#e8a93a'; c.fillRect(-40, -4, 76, 5);
+  c.strokeStyle = '#e8a93a'; c.lineWidth = 3; c.beginPath(); c.moveTo(-50, 22); c.lineTo(40, 22); c.quadraticCurveTo(54, 22, 52, 10); c.stroke();
+  // 선물 자루 + 산타
+  c.fillStyle = '#8a5a2b'; c.beginPath(); c.ellipse(-28, -24, 18, 16, 0, 0, Math.PI * 2); c.fill();
+  c.fillStyle = '#d23a2f'; circle(c, 6, -26, 13); c.fill();
+  c.fillStyle = '#ffd9b8'; circle(c, 10, -42, 8); c.fill();
+  c.fillStyle = '#ffffff'; c.beginPath(); c.ellipse(12, -35, 8, 6, 0, 0, Math.PI * 2); c.fill();
+  c.fillStyle = '#d23a2f'; c.beginPath(); c.moveTo(2, -46); c.quadraticCurveTo(10, -62, 22, -56); c.lineTo(17, -46); c.closePath(); c.fill();
+  c.fillStyle = '#ffffff'; circle(c, 22, -56, 3.5); c.fill(); c.fillRect(1, -49, 18, 4);
+  c.restore();
+}
+
+// ---------- 업적 ----------
+const ACHS = [
+  ['first',   '🗡', '첫 걸음',              '어둠을 처음 물리치기',        p => p.kills >= 1],
+  ['k100',    '👾', '어둠 사냥꾼',          '한 판에 어둠 100마리',        p => p.kills >= 100],
+  ['k500',    '⚔️', '전설의 엘프',          '한 판에 어둠 500마리',        p => p.kills >= 500],
+  ['c25',     '🔗', '연속 공격',            '25 콤보 달성',                p => (p.maxCombo || 0) >= 25],
+  ['c100',    '🌪', '멈출 수 없어!',        '100 콤보 달성',               p => (p.maxCombo || 0) >= 100],
+  ['fever',   '🔥', '축제 분위기',          '피버 타임 발동',              p => (p.fevers || 0) >= 1],
+  ['lv10',    '⭐', '쑥쑥 크는 엘프',       '레벨 10 달성',                p => p.level >= 10],
+  ['lv20',    '🌟', '빛나는 엘프',          '레벨 20 달성',                p => p.level >= 20],
+  ['boss',    '💀', '수호자 사냥',          '보스를 처음 물리치기',        () => Object.keys(bossDefeated).length >= 1],
+  ['shards',  '✨', '별을 모은 자',         '별조각 6개 모으기',           () => teamShards >= SHARDS],
+  ['thief',   '💰', '도둑 잡아라!',         '선물 도둑 그린치 잡기',       () => !!achFlags.thief],
+  ['mimic',   '😱', '깜짝이야!',            '미믹 선물상자 열어 보기',     () => !!achFlags.mimic],
+  ['win',     '🎄', '크리스마스를 지킨 엘프', '게임 클리어',               () => state === 'win'],
+  ['nodeath', '😇', '한 번도 안 쓰러졌어',  '쓰러지지 않고 클리어',        p => state === 'win' && p.deaths === 0],
+  ['fast',    '⏱', '번개 엘프',            '20분 안에 클리어',            () => state === 'win' && runTime < 1200],
+  ['hell',    '😈', '지옥에서 돌아온 엘프', '지옥 난이도 클리어',          () => state === 'win' && DIFF.id === 'hell'],
+];
+let achDone = {};
+try { achDone = JSON.parse(store('elf_ach') || '{}') || {}; } catch (e) { achDone = {}; }
+let achFlags = {}, achT = 0, achPop = [], bossSeen = {}, bossBanner = null, hudCombo = 0, comboPopAt = -9, perkZones = [];
+function checkAchievements(dt) {
+  achT -= dt;
+  if (achT > 0 || !local) return;
+  achT = 0.5;
+  for (const [id, icon, name, desc, fn] of ACHS) {
+    if (achDone[id] || !fn(local)) continue;
+    achDone[id] = Date.now(); store('elf_ach', JSON.stringify(achDone));
+    achPop.push({ t0: gtime + achPop.length * 1.2, icon, name, desc });
+    sfx('levelup'); confetti(local.x, local.y - 30, 30);
+  }
+}
+function drawAchPop() {
+  if (!achPop.length) return;
+  const a = achPop[0], k = gtime - a.t0;
+  if (k < 0) return;
+  if (k > 3.6) { achPop.shift(); return; }
+  const s = hudScale(), w = 300, h = 64;
+  const slide = Math.min(1, k / 0.35, (3.6 - k) / 0.35);
+  const x = -w + (w + 16) * slide, y = touchUI.enabled ? 345 : 255;          // 왼쪽에서 쏙 나와요
+  const c = ctx;
+  c.save(); c.scale(s, s);
+  paperPanel(c, x, y, w, h, 14, '#fff3cf');
+  garland(c, x + 14, y, w - 28);
+  c.font = '30px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(a.icon, x + 34, y + h / 2 + 2);
+  c.textBaseline = 'alphabetic'; c.textAlign = 'left';
+  c.font = FONT(15); c.fillStyle = UI.red; c.fillText('🏆 업적 달성!', x + 62, y + 24);
+  c.font = FONT(20); c.fillStyle = UI.ink; c.fillText(a.name, x + 62, y + 45);
+  c.font = FONT(13); c.fillStyle = UI.soft; c.fillText(a.desc, x + 62, y + 59);
+  c.restore();
+}
+
+// ---------- 보스 등장 연출 ----------
+function checkBossIntro() {
+  if (!local) return;
+  for (const e of enemies) {
+    if (e.kind !== 'boss' || !e.awake || e.dead || bossSeen[e.id] || dist(e.x, e.y, local.x, local.y) > 1500) continue;
+    bossSeen[e.id] = 1;
+    const d = BOSS_DEFS.find(q => q.id === e.id);
+    const role = e.id === 'lord' ? '최후의 결전 · 어둠의 군주' : d ? d.dir + (d.role === 'guardian' ? '의 수호자' : '의 중간 보스') : '보스';
+    bossBanner = { t0: gtime, name: e.name, role };
+    sfx('roar'); shake = Math.max(shake, 10);
+  }
+}
+function drawBossBanner() {
+  if (!bossBanner) return;
+  const k = gtime - bossBanner.t0, dur = 2.8;
+  if (k > dur) { bossBanner = null; return; }
+  const a = clamp(Math.min(k / 0.35, (dur - k) / 0.4), 0, 1), c = ctx, s = hudScale();
+  c.save();
+  const bh = 54 * s * a;
+  c.fillStyle = 'rgba(25,12,6,0.88)'; c.fillRect(0, 0, VW, bh); c.fillRect(0, VH - bh, VW, bh);
+  c.scale(s, s);
+  const W2 = VW / s, cx = W2 / 2 + (1 - Math.min(1, k / 0.35)) * -120, cy = (VH / s) * 0.34;
+  c.globalAlpha = a;
+  const w = 520, h = 96;
+  paperPanel(c, cx - w / 2, cy - h / 2, w, h, 16, '#3a241c');
+  garland(c, cx - w / 2 + 20, cy - h / 2, w - 40);
+  c.textAlign = 'center';
+  c.font = FONT(19); c.fillStyle = '#ffd166'; c.fillText('⚔ ' + bossBanner.role + ' ⚔', cx, cy - 12);
+  inkText(c, bossBanner.name, cx, cy + 30, PEN(46), 'center', UI.cream, '#3b2416');
+  c.restore();
+}
+
 function gainXp(p, n) {
+  n *= (1 + Math.min(1, (p.combo || 0) * 0.02)) * (worldEv && worldEv.id === 'gold' ? 2 : 1);   // 콤보·황금 눈 보너스
   p.xp += n;
   while (p.xp >= p.xpNext) {
     p.xp -= p.xpNext; p.level++; p.xpNext = Math.round(12 + p.level * 9);
@@ -1367,7 +1619,8 @@ function gainXp(p, n) {
     pillar(p.x, p.y, ['#ffd166', '#fff3a0', '#ffffff'], 26, 26, -320, -140);
     sparkle(p.x, p.y - 20, '#ffd166', 12, 180);
     sfx('levelup', p.x, p.y); if (p === local) flashScreen('#fff3c4', 0.25);
-    notify(p, 'T', '⬆ 레벨 ' + p.level + '! 공격력과 체력이 올랐어요', '#ffd166');
+    grantPick(p);
+    notify(p, 'T', '⬆ 레벨 ' + p.level + '! 오른쪽 🎁 선물 카드에서 능력 하나를 골라요', '#ffd166');
   }
 }
 
@@ -1420,10 +1673,14 @@ function damageEnemy(e, dmg, src) {
     sfx('hit', e.x, e.y);
     return;
   }
+  // 치명타! (기본 10% + 카드 + 피버 중 +10%)
+  const crit = !!(src && src.level) && Math.random() < 0.1 + (src.crit || 0) + (src.feverT > 0 ? 0.1 : 0);
+  if (crit) dmg *= 2;
   e.hp -= dmg; e.flash = 0.08;
   if (e.kind === 'boss' && !e.awake) wakeBoss(e);
   const big = dmg >= 40;
-  addFloat({ x: e.x + rand(-10, 10), y: e.y - e.r - 6 - (e.z || 0), text: Math.round(dmg) + (big ? '!' : ''), color: big ? '#ffd166' : '#ffffff', t: 0, life: big ? 0.8 : 0.6, size: (e.kind === 'boss' ? 17 : 14) + (big ? 6 : 0) });
+  if (crit) addFloat({ x: e.x + rand(-10, 10), y: e.y - e.r - 10 - (e.z || 0), text: '💥' + Math.round(dmg), color: '#ff8a3c', t: 0, life: 0.9, size: (e.kind === 'boss' ? 23 : 20) });
+  else addFloat({ x: e.x + rand(-10, 10), y: e.y - e.r - 6 - (e.z || 0), text: Math.round(dmg) + (big ? '!' : ''), color: big ? '#ffd166' : '#ffffff', t: 0, life: big ? 0.8 : 0.6, size: (e.kind === 'boss' ? 17 : 14) + (big ? 6 : 0) });
   glowPuff(e.x + rand(-e.r, e.r) * 0.4, e.y - (e.z || 0) + rand(-e.r, e.r) * 0.4, '#ffffff', big ? 22 : 12, 0.12);
   sfx('hit', e.x, e.y);
   if (e.hp <= 0) killEnemy(e, src);
@@ -1438,6 +1695,7 @@ function killEnemy(e, src) {
   sfx('kill', e.x, e.y);
   if (e.kind === 'elite') { flashScreen('#fff3c4', 0.25, e.x, e.y); sparkle(e.x, e.y, '#ffd166', 16, 220); }
   if (killer) killer.kills++;
+  if (src && src.level) { addCombo(src); if (src.vamp) src.hp = Math.min(src.maxHp, src.hp + src.vamp); }
   if (killer === local && tut.step === 2) tut.kills++;
   // 빛 조각(경험치) 드롭
   const orbs = Math.min(12, Math.ceil(e.xp / 3));
@@ -1452,6 +1710,14 @@ function killEnemy(e, src) {
     if (T.poisonDeath) hazards.push({ x: e.x, y: e.y, r: e.kind === 'elite' ? 130 : 75, t: 0, dur: 4, team: 'pool', dmg: e.dmg * 0.5, tick: 0.3, color: '#8fd14f' });
     if (T.fireDeath) ring(e.x, e.y, e.kind === 'elite' ? 18 : 10, 210, e.dmg * 0.5, Math.random(), 7, '#ff7b3c');
   }
+  if (T && T.thief) {
+    for (let i = 0; i < 4; i++) gifts.push({ x: e.x + Math.cos(i * 1.57) * 60, y: e.y + Math.sin(i * 1.57) * 60, opened: false, rich: true });
+    confetti(e.x, e.y - 20, 40); sparkle(e.x, e.y, '#ffd166', 20, 240);
+    toastAll('🎉 선물 도둑을 잡았다! 훔쳐 간 선물을 되찾았어요', '#ffd166');
+    if (killer === local) achFlags.thief = 1;
+    if (worldEv && worldEv.id === 'thief') endWorldEvent(true);
+  }
+  if (T && T.mimic) for (let i = 0; i < 2; i++) gifts.push({ x: e.x + (i ? 40 : -40), y: e.y, opened: false, rich: true });
   if (e.kind === 'elite') {
     gifts.push({ x: e.x, y: e.y, opened: false, rich: true });
     toastAll('🎁 정예 어둠을 물리쳤다! 선물상자가 나왔어요', '#ffd166');
@@ -1512,9 +1778,22 @@ function updateEnemy(e, dt) {
   const tgt = nearestPlayer(e.x, e.y, 1400);
   if (!tgt) return;
   const dx = tgt.x - e.x, dy = tgt.y - e.y, d = Math.hypot(dx, dy) || 1;
-  const spd = e.spd * (e.slowT > 0 ? 0.45 : 1);
+  const spd = e.spd * (e.slowT > 0 ? 0.45 : 1) * (worldEv && worldEv.id === 'blizzard' ? 0.6 : 1);
   const T = ETYPES[e.type];
   const a2t = Math.atan2(dy, dx);
+  if (T.thief) {                                     // 선물 도둑: 도망 다니다 가끔 멈춰서 약 올리기
+    e.escape -= dt; e.taunt = (e.taunt === undefined ? 2.5 : e.taunt) - dt;
+    if (e.escape <= 0) {
+      e.dead = true; burst(e.x, e.y, '#9be15d', 30, 260);
+      toastAll('💨 선물 도둑이 도망쳤어요… 다음엔 꼭 잡아요!', '#c9b6ff');
+      if (worldEv && worldEv.id === 'thief') endWorldEvent(true);
+      return;
+    }
+    if (e.taunt < 0) { if (e.taunt < -0.7) e.taunt = rand(2, 3.2); return; }
+    const fa = a2t + Math.PI + Math.sin(gtime * 2.4 + e.seed) * 0.9;
+    e.x = clamp(e.x + Math.cos(fa) * spd * dt, 120, W - 120); e.y = clamp(e.y + Math.sin(fa) * spd * dt, 120, H - 120);
+    return;
+  }
   if (e.homeX !== undefined && T.shot === 'crystal') { e.x = e.homeX; e.y = e.homeY; }
   if (T.ranged) {
     const want = d > 300 ? 1 : d < 200 ? -0.7 : 0;
@@ -1604,7 +1883,7 @@ function updateEnemy(e, dt) {
     e.atk -= dt;
     if (e.atk <= 0) { e.atk = 2.6; ring(e.x, e.y, 12, 200, e.dmg * 0.6, gtime, 7, '#ff9a3c'); }
   }
-  if (!e.burrowed && (e.z || 0) < 10 && d < e.r + tgt.r && e.hitCd <= 0) {
+  if (!e.burrowed && e.dmg > 0 && (e.z || 0) < 10 && d < e.r + tgt.r && e.hitCd <= 0) {
     hurtPlayer(tgt, e.dmg * (e.cstate === 'dash' ? 1.4 : 1)); e.hitCd = 0.7;
     if (T.chill) { tgt.slowT = 1.8; burst(tgt.x, tgt.y, '#bfe9ff', 8, 120); }
   }
@@ -2000,6 +2279,7 @@ function startGame(opts) {
   for (const k in bossDefeated) delete bossDefeated[k];
   runTime = 0; spawnT = 0; graceT = 4; giftT = 0; giftsOpened = 0; eliteT = DIFF.elite; teamShards = 0;
   darkLevel = 0; darkT = 0; hordeT = DIFF.horde;
+  worldEv = null; worldEvT = 100; sleighs = []; bossSeen = {}; bossBanner = null; achFlags = {}; achPop = []; hudCombo = 0;
   finalStarted = false; finalBoss = null; endingT = 0; treeLight = 0; barrierMsgT = 0; barrierBreak = 0;
   Object.assign(tut, { step: 0, moved: 0, shots: 0, kills: 0, dashed: 0, gifts: 0, done: false });
   if (multi) Object.assign(tut, { step: 5, done: true });       // 친구들과 할 땐 튜토리얼은 건너뛰어요
@@ -2124,6 +2404,7 @@ function spawner(dt) {
     }
   }
   updateGiftSpawns(dt);
+  updateWorldEvents(dt);
   // 떠도는 정예 어둠 (미니 보스)
   if (tut.done && !finalStarted) {
     eliteT -= dt;
@@ -2175,7 +2456,17 @@ function updateGiftSpawns(dt) {
 }
 
 function openGift(p, g) {
-  g.opened = true; giftsOpened++;
+  g.opened = true;
+  // 가끔은 선물상자가 미믹! (튜토리얼 선물은 빼고)
+  if (!g.tutorial && tut.done && Math.random() < 0.07) {
+    const e = makeEnemy('mimic', g.x, g.y, zoneAt(g.x, g.y));
+    enemies.push(e);
+    burst(g.x, g.y, '#b3302a', 24, 240); shock(g.x, g.y, '#ff5a67', 120, 0.4, 5); sfx('roar', g.x, g.y);
+    notify(p, 'T', '😱 으악! 선물상자가 미믹이었어요! 물리치면 진짜 선물을 줘요', '#ff5a67');
+    if (p === local) achFlags.mimic = 1;
+    return;
+  }
+  giftsOpened++;
   if (p === local) tut.gifts++;
   burst(g.x, g.y, '#ffd166', 26, 220);
   confetti(g.x, g.y - 10, 34); shock(g.x, g.y, '#ffd166', 110, 0.4, 4); sfx('gift', g.x, g.y);
@@ -2232,9 +2523,11 @@ function updatePickups(dt) {
       sayAll('spark', lines[s.skill]);
     }
   }
+  let MAG = 1;
+  for (const q of players) MAG = Math.max(MAG, q.magnet || 1);
   for (const k of pickups) {
     k.t += dt;
-    const p = nearestPlayer(k.x, k.y, k.type === 'xp' ? 150 : k.type === 'shard' ? 180 : 40);
+    const p = nearestPlayer(k.x, k.y, k.type === 'xp' ? 150 * MAG : k.type === 'shard' ? 180 : 40);
     if (!p) continue;
     const d = dist(k.x, k.y, p.x, p.y);
     if ((k.type === 'xp' || k.type === 'shard') && d > 22) {
@@ -3110,6 +3403,7 @@ function playEvent(e) {
     case 's': sfx(a, x === null ? undefined : x, y === null ? undefined : y); break;
     case 'z': zaps.push({ pts: a, t: 0 }); break;
     case 'L': pillar(x, y, a, b, d, f, e[7]); break;
+    case 'Y': launchSleigh(a, b); break;
     case 'F': flashScreen(a, b, x === null ? undefined : x, y === null ? undefined : y); break;
     case 'h': hitStop(a); break;
     case 'T': toast(a, b); break;
@@ -3272,6 +3566,9 @@ function hostOnData(r, d) {
   } else if (d.t === 'in') {
     const p = players.find(q => q.id === r.pid);
     if (p) p.net = d;
+  } else if (d.t === 'pk') {
+    const p = players.find(q => q.id === r.pid);
+    if (p && state === 'play') pickUpgrade(p, d.i | 0);
   } else if (d.t === 'sk') {
     const p = players.find(q => q.id === r.pid);
     if (p && !p.dead && SKILLS[d.s] && state === 'play') {
@@ -3309,7 +3606,7 @@ function hostSend(dt) {
   Net.giftSig = gsig;
   const common = {
     t: 's', rt: +runTime.toFixed(2), st: state, et: +endingT.toFixed(2), sh: teamShards, fs: finalStarted ? 1 : 0,
-    bd: Object.keys(bossDefeated), sk: +shake.toFixed(1),
+    bd: Object.keys(bossDefeated), sk: +shake.toFixed(1), wev: worldEv ? [worldEv.id, +worldEv.t.toFixed(1), worldEv.dur] : 0,
     P: players.map(q => [q.id, Math.round(q.x), Math.round(q.y), +q.aim.toFixed(2), q.dead ? 1 : 0, Math.round(q.hp), q.maxHp, q.level, q.moving ? 1 : 0, q.invuln > 0 ? 1 : 0, LOOKS.indexOf(q.look), q.name, +q.walk.toFixed(2), q.weapons[q.wIdx] ? q.weapons[q.wIdx].type : 'cane']),
     S: scrolls.filter(s => !s.taken).map(s => [Math.round(s.x), Math.round(s.y), s.skill]),
     A: allies.map(a => [a.type, Math.round(a.x), Math.round(a.y), +(a.a || 0).toFixed(2), +a.t.toFixed(2)]),
@@ -3328,6 +3625,8 @@ function hostSend(dt) {
       kills: p.kills, deaths: p.deaths, dead: p.dead ? 1 : 0, rt: +p.respawnT.toFixed(1), slow: +p.slowT.toFixed(2), inv: +p.invuln.toFixed(2),
       w: p.weapons.map(w => [w.type, w.lvl]), sk: SKILL_ORDER.filter(s => p.skills[s]), cd: SKILL_ORDER.map(s => +p.cd[s].toFixed(1)),
       dm: p.dashCdMul, sx: Math.round(p.spawnX), sy: Math.round(p.spawnY),
+      cb: p.combo || 0, ct: +(p.comboT || 0).toFixed(2), fv: +(p.feverT || 0).toFixed(1), mc: p.maxCombo || 0, fvs: p.fevers || 0,
+      of: p.offers || 0, pk: p.picks || 0, cdm: p.cdMul || 1,
     };
     msg.E = enemies.filter(e => !e.dead && (e.kind === 'boss' || near(e.x, e.y, 1500))).map(encEnemy);
     msg.B = bullets.filter(b => near(b.x, b.y, 1100)).map(b => [Math.round(b.x), Math.round(b.y), Math.round(b.vx), Math.round(b.vy), b.type, Math.round(b.r), +b.life.toFixed(2)]);
@@ -3423,7 +3722,8 @@ function clientLobbyTick(dt) {
 }
 function clientSnap(d) {
   Net.lastSnap = performance.now();
-  runTime = d.rt; teamShards = d.sh; shake = Math.max(shake, (d.sk || 0) * 0.6);
+  runTime = d.rt; teamShards = d.sh;
+  worldEv = d.wev ? { id: d.wev[0], t: d.wev[1], dur: d.wev[2] } : null; shake = Math.max(shake, (d.sk || 0) * 0.6);
   if (d.fs && !finalStarted) barrierBreak = 1.2;
   finalStarted = !!d.fs;
   for (const k in bossDefeated) delete bossDefeated[k];
@@ -3445,6 +3745,8 @@ function clientSnap(d) {
     if ((m.tp || 0) !== (local.tpSeq || 0)) { local.tpSeq = m.tp; local.x = m.x; local.y = m.y; local.vx = local.vy = 0; }
     Object.assign(local, { hp: m.hp, maxHp: m.maxHp, xp: m.xp, xpNext: m.xpNext, level: m.level, kills: m.kills, deaths: m.deaths, dead: !!m.dead, respawnT: m.rt, slowT: m.slow, dashCdMul: m.dm, spawnX: m.sx, spawnY: m.sy });
     local.invuln = Math.max(local.invuln, m.inv);
+    Object.assign(local, { combo: m.cb || 0, comboT: m.ct || 0, feverT: m.fv || 0, maxCombo: m.mc || 0, fevers: m.fvs || 0, cdMul: m.cdm || 1 });
+    if (performance.now() > (local.pkWait || 0)) { local.offers = m.of || null; local.picks = m.pk || 0; }
     local.weapons = m.w.map(([type, lvl]) => ({ type, lvl }));
     if (local.wIdx >= local.weapons.length) local.wIdx = 0;
     for (const s of SKILL_ORDER) local.skills[s] = m.sk.includes(s);
@@ -3489,7 +3791,7 @@ function clientSkill(s) {
     if (autoAim) { const t = nearestEnemy(local.x, local.y, 600); if (t) { tx = t.x; ty = t.y; } else { tx = local.x + Math.cos(local.aim) * 250; ty = local.y + Math.sin(local.aim) * 250; } }
   }
   if (s === 'dash') useSkill(local, 'dash');                    // 대시는 내 화면에서 바로 움직임
-  else local.cd[s] = SKILLS[s].cd;
+  else local.cd[s] = SKILLS[s].cd * (local.cdMul || 1);
   Net.host.send({ t: 'sk', s, aim: +local.aim.toFixed(3), ix: local.ix, iy: local.iy, tx: tx === undefined ? undefined : Math.round(tx), ty: ty === undefined ? undefined : Math.round(ty) });
 }
 function clientUpdate(dt) {
@@ -3918,6 +4220,12 @@ function drawPlayer(p) {
   ctx.fillStyle = '#333'; rr(ctx, 6, -3, 20, 6, 3); ctx.fill();
   ctx.fillStyle = w.color; rr(ctx, 8, -2, 18, 4, 2); ctx.fill();
   ctx.restore();
+  if (p.feverT > 0) {
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    const fg = ctx.createRadialGradient(p.x, p.y - 6, 4, p.x, p.y - 6, 44);
+    fg.addColorStop(0, 'rgba(255,170,60,0.55)'); fg.addColorStop(1, 'rgba(255,120,40,0)');
+    ctx.fillStyle = fg; circle(ctx, p.x, p.y - 6, 44 + Math.sin(gtime * 10) * 3); ctx.fill(); ctx.restore();
+  }
   drawElf(ctx, p.x, p.y, p.look, p.face, p.walk, p.moving, 1.15, blink ? 0.4 : 1);
   ctx.font = 'bold 13px \\"Gaegu\\", sans-serif'; ctx.textAlign = 'center';
   ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(10,15,40,0.8)';
@@ -4036,6 +4344,16 @@ function drawAcc(c, acc, r, ry, color) {
   } else if (acc === 'frog') {
     c.fillStyle = color; circle(c, -r * 0.38, -ry * 0.85, r * 0.32); c.fill(); circle(c, r * 0.38, -ry * 0.85, r * 0.32); c.fill();
     c.fillStyle = '#ffef6b'; circle(c, -r * 0.38, -ry * 0.9, r * 0.17); c.fill(); circle(c, r * 0.38, -ry * 0.9, r * 0.17); c.fill();
+  } else if (acc === 'sack') {
+    c.fillStyle = '#8a5a2b'; c.beginPath(); c.ellipse(r * 0.75, -ry * 0.55, r * 0.55, r * 0.6, 0.3, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#c8372d'; c.fillRect(r * 0.55, -ry * 1.15, r * 0.3, r * 0.3);
+    c.fillStyle = '#e8a93a'; c.fillRect(r * 0.66, -ry * 1.15, r * 0.08, r * 0.3);
+    c.fillStyle = '#d23a2f'; c.beginPath(); c.moveTo(-r * 0.5, -ry * 0.95); c.quadraticCurveTo(-r * 0.1, -ry * 1.9, r * 0.4, -ry * 1.05); c.closePath(); c.fill();
+    c.fillStyle = '#ffffff'; circle(c, r * 0.4, -ry * 1.05, r * 0.14); c.fill();
+  } else if (acc === 'giftlid') {
+    c.fillStyle = '#e8a93a'; c.fillRect(-r * 0.12, -ry * 1.15, r * 0.24, r * 1.75); c.fillRect(-r * 0.95, -ry * 0.1, r * 1.9, r * 0.22);
+    c.beginPath(); c.ellipse(-r * 0.3, -ry * 1.25, r * 0.3, r * 0.18, -0.5, 0, Math.PI * 2); c.ellipse(r * 0.3, -ry * 1.25, r * 0.3, r * 0.18, 0.5, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#ffffff'; for (let i = -2; i <= 2; i++) { c.beginPath(); c.moveTo(i * r * 0.22 - 4, r * 0.32); c.lineTo(i * r * 0.22, r * 0.5); c.lineTo(i * r * 0.22 + 4, r * 0.32); c.fill(); }
   } else if (acc === 'drip') {
     c.fillStyle = '#5b4a32';
     for (const x of [-0.6, -0.1, 0.5]) { c.beginPath(); c.ellipse(r * x, r * 0.15, r * 0.1, r * 0.38, 0, 0, Math.PI * 2); c.fill(); }
@@ -4700,6 +5018,7 @@ function drawWorld() {
   const list = [];
   for (const d of decor) if (!d.flat && inView(d.x, d.y, 160)) list.push({ y: d.y, f: () => drawDecor(d) });
   for (const a of allies) if (inView(a.x, a.y)) list.push({ y: a.y, f: () => drawAlly(a) });
+  for (const sl of sleighs) list.push({ y: sl.y + 400, f: () => drawSleigh(sl) });
   if (inView(CX, CY, 900)) list.push({ y: CY + 60, f: drawTree });
   for (const t of turrets) if (inView(t.x, t.y)) list.push({ y: t.y, f: () => drawTurret(t) });
   for (const e of enemies) if (!e.dead && inView(e.x, e.y, 200)) list.push({ y: e.y, f: () => e.kind === 'boss' ? drawBoss(e) : drawSlime(e) });
@@ -4882,6 +5201,24 @@ function drawSnow(dt, density = 1) {
 // =====================================================================
 //  HUD
 // =====================================================================
+// 황금 눈 / 눈보라 화면 효과 + 피버 테두리
+function drawWeatherFx() {
+  const c = ctx, id = worldEv.id;
+  c.save();
+  if (id === 'gold') {
+    c.fillStyle = 'rgba(255,200,80,0.07)'; c.fillRect(0, 0, VW, VH);
+    c.fillStyle = '#ffd166';
+    for (let i = 0; i < 40; i++) { const x = (i * 197 + gtime * 40 * (1 + i % 3)) % VW, y = (i * 131 + gtime * 70 * (1 + i % 2)) % VH; c.globalAlpha = 0.5 + 0.5 * Math.sin(gtime * 4 + i); drawStar(c, x, y, 4, 1.8, '#ffd166'); }
+  } else if (id === 'blizzard') {
+    const g = c.createRadialGradient(VW / 2, VH / 2, Math.min(VW, VH) * 0.25, VW / 2, VH / 2, Math.max(VW, VH) * 0.7);
+    g.addColorStop(0, 'rgba(235,245,255,0)'); g.addColorStop(1, 'rgba(235,245,255,0.55)');
+    c.fillStyle = g; c.fillRect(0, 0, VW, VH);
+    c.strokeStyle = 'rgba(255,255,255,0.7)'; c.lineWidth = 1.5; c.beginPath();
+    for (let i = 0; i < 70; i++) { const x = (i * 173 + gtime * 900) % (VW + 200) - 100, y = (i * 97 + gtime * 380) % VH; c.moveTo(x, y); c.lineTo(x - 26, y - 10); }
+    c.stroke();
+  }
+  c.restore();
+}
 function drawHUD() {
   // 작은 화면에서는 HUD를 통째로 줄여서 그려요
   const realVW = VW, realVH = VH, s = hudScale();
@@ -4893,6 +5230,12 @@ function drawHUD() {
 }
 function drawHUDInner() {
   const p = local, c = ctx;
+  perkZones = [];
+  if (p.feverT > 0) {                                  // 피버: 화면 가장자리가 따뜻하게 일렁여요
+    const g = c.createRadialGradient(VW / 2, VH / 2, Math.min(VW, VH) * 0.35, VW / 2, VH / 2, Math.max(VW, VH) * 0.75);
+    g.addColorStop(0, 'rgba(255,140,40,0)'); g.addColorStop(1, 'rgba(255,140,40,' + (0.22 + 0.08 * Math.sin(gtime * 8)) + ')');
+    c.fillStyle = g; c.fillRect(0, 0, VW, VH);
+  }
   const boxTop = el('storyBox').getBoundingClientRect().top / hudS;
   c.textBaseline = 'alphabetic';
   // 왼쪽 위: 플레이어 상태 (종이 카드 + 꼬마전구)
@@ -4947,6 +5290,15 @@ function drawHUDInner() {
     c.strokeStyle = UI.paper; c.lineWidth = 1.5; rr(c, VW / 2 - bw / 2, 124, bw, 12, 6); c.stroke();
     ty = 176;
   }
+  // 세계 이벤트 알림 띠
+  if (worldEv && WEVENTS[worldEv.id]) {
+    const E = WEVENTS[worldEv.id], txt = E.short + ' · ' + Math.ceil(worldEv.t) + '초';
+    c.font = FONT(18); const ew = c.measureText(txt).width + 44;
+    paperPanel(c, VW / 2 - ew / 2, ty - 22, ew, 34, 14, '#fff1cf');
+    c.fillStyle = UI.ink; c.textAlign = 'center'; c.fillText(txt, VW / 2, ty);
+    c.fillStyle = E.color; rr(c, VW / 2 - ew / 2 + 12, ty + 4, Math.max(0, (ew - 24) * worldEv.t / worldEv.dur), 4, 2); c.fill();
+    ty += 44;
+  }
   // 알림 (종이 쪽지)
   for (let i = 0; i < toasts.length; i++) {
     const t = toasts[i];
@@ -4962,6 +5314,20 @@ function drawHUDInner() {
 
   c.restore();
 
+  // 콤보 & 피버 (왼쪽)
+  if ((p.combo || 0) >= 2 || p.feverT > 0) {
+    if (p.combo !== hudCombo) { if ((p.combo || 0) > hudCombo) comboPopAt = gtime; hudCombo = p.combo || 0; }
+    const pop = 1 + Math.max(0, 0.35 - (gtime - comboPopAt)) * 1.2, cy0 = touchUI.enabled ? 262 : 150;
+    c.save(); c.translate(26, cy0 + 30); c.scale(pop, pop);
+    if ((p.combo || 0) >= 2) {
+      c.font = PEN(46); const cw = c.measureText(String(p.combo)).width;
+      inkText(c, String(p.combo), 0, 0, PEN(46), 'left', p.feverT > 0 ? '#ff7b3c' : UI.red);
+      inkText(c, 'COMBO', cw + 6, -4, FONT(18), 'left', UI.ink);
+      bar(c, 0, 10, 130, 7, (p.comboT || 0) / 3, '#ff9a3c');
+    }
+    if (p.feverT > 0) inkText(c, '🔥 FEVER ' + Math.ceil(p.feverT) + '초', 0, 40, FONT(19), 'left', '#ff7b3c');
+    c.restore();
+  }
   // 오른쪽 위: 지도
   const m = Math.min(186, VW * 0.22), mx = VW - m - 18, my = 22, sc = m / W;
   paperPanel(c, mx - 7, my - 7, m + 14, m + 14, 12);
@@ -5005,6 +5371,32 @@ function drawHUDInner() {
   paperPanel(c, VW - gw - 18, my + m + 18, gw, 30, 12);
   c.fillStyle = UI.ink; c.fillText(goal.text, VW - 31, my + m + 39);
   if (!touchUI.enabled) inkText(c, autoAim ? '🎯 자동 조준 ON (T)' : '🖱 마우스 조준 (T: 자동)', VW - 22, my + m + 70, FONT(16), 'right', autoAim ? UI.green : UI.soft);
+  // 레벨업 선물 카드 (3장 중 1장 고르기)
+  if (p.offers && !p.dead) {
+    const cw = 250, ch = 54, cx0 = VW - cw - 18;
+    let cy = my + m + (touchUI.enabled ? 62 : 86);
+    const wob = Math.sin(gtime * 4) * 0.5 + 0.5;
+    inkText(c, '🎁 선물 카드 하나를 골라요' + ((p.picks || 1) > 1 ? ' (' + p.picks + '장)' : ''), VW - 22, cy + 14, FONT(17), 'right', UI.red);
+    cy += 24;
+    p.offers.forEach((id, i) => {
+      const u = UPG[id]; if (!u) return;
+      const y = cy + i * (ch + 8);
+      c.save(); c.shadowColor = '#ffb347'; c.shadowBlur = 8 + wob * 10;
+      paperPanel(c, cx0, y, cw, ch, 12, '#fff6e2');
+      c.restore();
+      c.font = '26px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(u.icon, cx0 + 28, y + ch / 2 + 1); c.textBaseline = 'alphabetic';
+      c.textAlign = 'left'; c.font = FONT(18); c.fillStyle = UI.red; c.fillText(u.name, cx0 + 54, y + 24);
+      c.font = FONT(15); c.fillStyle = UI.ink; c.fillText(u.desc, cx0 + 54, y + 44);
+      if (!touchUI.enabled) {
+        const key = ['8', '9', '0'][i];
+        c.fillStyle = UI.red; circle(c, cx0 + cw - 18, y + ch / 2, 11); c.fill(); c.strokeStyle = UI.ink; c.lineWidth = 1.5; c.stroke();
+        c.fillStyle = UI.cream; c.textAlign = 'center'; c.font = FONT(15); c.fillText(key, cx0 + cw - 18, y + ch / 2 + 5);
+      }
+      const zx = cx0 * hudS, zy = y * hudS, zw = cw * hudS, zh = ch * hudS;
+      perkZones.push({ x: zx, y: zy, w: zw, h: zh, i });
+      touchZone(zx, zy, zw, zh, () => choosePerk(i), 2);
+    });
+  }
   // 목표 방향 화살표
   if (goal.x !== undefined) {
     const sx = goal.x - cam.x, sy = goal.y - cam.y;
@@ -5386,8 +5778,12 @@ function frameBody(dt) {
     drawSnow(paused ? 0 : dt, 0.7);
     ctx.save(); ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = '#f7e6cb'; ctx.fillRect(0, 0, VW, VH); ctx.restore();
     if (screenFlashA > 0) { ctx.globalAlpha = Math.min(1, screenFlashA); ctx.fillStyle = screenFlashColor; ctx.fillRect(0, 0, VW, VH); ctx.globalAlpha = 1; }
+    if (worldEv && state === 'play') drawWeatherFx();
     if (state === 'ending' || state === 'win') drawCinematic();
-    else if (local) drawHUD();
+    else if (local) { checkBossIntro(); drawHUD(); drawBossBanner(); }
+    if (state === 'play' && !paused) updateSleighs(dt, Net.mode !== 'client');
+    if ((state === 'play' || state === 'win') && local) checkAchievements(dt);
+    drawAchPop();
     objT += dt;
     if (objT > 1 && el('paneGoal').classList.contains('on')) { objT = 0; renderObjectives(); }
   }
@@ -5395,7 +5791,7 @@ function frameBody(dt) {
 // 캐릭터·적·보스·선물·트리를 사인펜 선으로 그려요
 drawElf = inked(drawElf, 1.3); drawPlayer = inked(drawPlayer, 1.3); drawSlime = inked(drawSlime); drawBoss = inked(drawBoss, 2.2);
 drawAlly = inked(drawAlly); drawTurret = inked(drawTurret); drawGift = inked(drawGift); drawScroll = inked(drawScroll);
-drawTree = inked(drawTree, 2.2); drawDecor = inked(drawDecor, 1.6, true); drawLobby = inked(drawLobby, 2);
+drawTree = inked(drawTree, 2.2); drawSleigh = inked(drawSleigh, 1.8); drawDecor = inked(drawDecor, 1.6, true); drawLobby = inked(drawLobby, 2);
 buildLobby();
 if (IS_PHONE) enableTouch(); else autoStoryLayout();
 requestAnimationFrame(frame);
