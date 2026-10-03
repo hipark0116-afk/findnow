@@ -775,7 +775,8 @@ let players = [];
 let local = null;              // 이 컴퓨터의 플레이어
 let enemies = [], bullets = [], ebullets = [], hazards = [], turrets = [], allies = [], zaps = [];
 let pickups = [], gifts = [], scrolls = [], particles = [], floats = [], toasts = [];
-let runTime = 0, gtime = 0, spawnT = 0, graceT = 0, eliteT = 0;
+let runTime = 0, gtime = 0, spawnT = 0, graceT = 0, eliteT = 0, giftT = 0, giftsOpened = 0;
+const GIFT_MAX = 260;            // 맵에 한 번에 놓여 있는 선물상자 최대 개수
 let teamShards = 0, finalStarted = false, finalBoss = null, endingT = 0, treeLight = 0;
 let shake = 0, hurtVignette = 0, barrierMsgT = 0, barrierBreak = 0;
 let autoAim = false;
@@ -912,7 +913,7 @@ function renderObjectives() {
     line(finalBoss && finalBoss.dead, teamShards >= SHARDS && !(finalBoss && finalBoss.dead), '트리로 돌아가 어둠의 군주 녹스 물리치기');
     line(state === 'win', state === 'ending', '크리스마스 트리에 빛을 켜고 주문 걸기');
     const learned = local ? SKILL_ORDER.filter(s => s !== 'dash' && local.skills[s]).length : 0;
-    items.push('<div style="margin-top:6px;color:var(--ink-soft)">⏱ ' + fmtTime(runTime) + ' · ✦ 스킬 ' + learned + '/' + (SKILL_ORDER.length - 1) + ' · 🎁 ' + gifts.filter(g => g.opened).length + '개 열기</div>');
+    items.push('<div style="margin-top:6px;color:var(--ink-soft)">⏱ ' + fmtTime(runTime) + ' · ✦ 스킬 ' + learned + '/' + (SKILL_ORDER.length - 1) + ' · 🎁 ' + (Net.mode === 'client' ? gifts.filter(g => g.opened).length : giftsOpened) + '개 열기</div>');
   }
   el('objList').innerHTML = items.join('');
 }
@@ -1895,7 +1896,7 @@ function startGame(opts) {
   fxTimers = []; screenFlashA = 0; hitStopT = 0;
   gifts = []; scrolls = [];
   for (const k in bossDefeated) delete bossDefeated[k];
-  runTime = 0; spawnT = 0; graceT = 4; eliteT = DIFF.elite; teamShards = 0;
+  runTime = 0; spawnT = 0; graceT = 4; giftT = 0; giftsOpened = 0; eliteT = DIFF.elite; teamShards = 0;
   darkLevel = 0; darkT = 0; hordeT = DIFF.horde;
   finalStarted = false; finalBoss = null; endingT = 0; treeLight = 0; barrierMsgT = 0; barrierBreak = 0;
   Object.assign(tut, { step: 0, moved: 0, shots: 0, kills: 0, dashed: 0, gifts: 0, done: false });
@@ -1905,10 +1906,7 @@ function startGame(opts) {
     const scale = 1 + 0.35 * (players.length - 1);               // 인원이 많을수록 보스가 튼튼해져요
     for (const d of BOSS_DEFS) { const b = makeBoss(d); b.hp = b.maxHp = Math.round(d.hp * DIFF.boss * scale); enemies.push(b); }
     // 선물상자 흩뿌리기 (트리에 가까울수록 좋은 선물)
-    for (let i = 0; i < 140; i++) {
-      const a = Math.random() * Math.PI * 2, d = rand(650, 4300);
-      gifts.push({ x: clamp(CX + Math.cos(a) * d, 120, W - 120), y: clamp(CY + Math.sin(a) * d, 120, H - 120), opened: false, rich: d < 2300 });
-    }
+    for (let i = 0; i < GIFT_MAX - 20; i++) spawnGift(null, false);
     // 시작 지점 근처 튜토리얼용 선물
     const ta = Math.atan2(CY - local.y, CX - local.x);
     gifts.push({ x: local.x + Math.cos(ta) * 260 + 80, y: local.y + Math.sin(ta) * 260, opened: false, rich: false, tutorial: true });
@@ -2023,6 +2021,7 @@ function spawner(dt) {
       sfx('roar'); flashScreen('#3a1050', 0.4);
     }
   }
+  updateGiftSpawns(dt);
   // 떠도는 정예 어둠 (미니 보스)
   if (tut.done && !finalStarted) {
     eliteT -= dt;
@@ -2046,8 +2045,35 @@ function spawner(dt) {
   }
 }
 
+// 선물상자 하나 놓기: near가 있으면 그 플레이어 근처(화면 조금 밖)에
+function spawnGift(near, fresh) {
+  let x, y;
+  for (let k = 0; k < 8; k++) {
+    if (near) { const a = Math.random() * Math.PI * 2, d = rand(450, 1100); x = near.x + Math.cos(a) * d; y = near.y + Math.sin(a) * d; }
+    else { const a = Math.random() * Math.PI * 2, d = rand(650, 4300); x = CX + Math.cos(a) * d; y = CY + Math.sin(a) * d; }
+    x = clamp(x, 120, W - 120); y = clamp(y, 120, H - 120);
+    if (dist(x, y, CX, CY) > 620) break;
+  }
+  const g = { x, y, opened: false, rich: dist(x, y, CX, CY) < 2300 || Math.random() < 0.15 };
+  gifts.push(g);
+  if (fresh && local && dist(x, y, local.x, local.y) < 900) burst(x, y, '#ffd166', 14, 140);
+  return g;
+}
+// 선물상자는 계속 새로 생겨요 (열린 상자는 정리해서 가볍게)
+function updateGiftSpawns(dt) {
+  if (!tut.done) return;
+  giftT -= dt;
+  if (giftT > 0) return;
+  giftT = 3;
+  if (gifts.some(g => g.opened)) gifts = gifts.filter(g => !g.opened);
+  if (gifts.length >= GIFT_MAX) return;
+  const ps = alivePlayers();
+  const n = Math.min(GIFT_MAX - gifts.length, 1 + Math.floor(ps.length / 3));
+  for (let i = 0; i < n; i++) spawnGift(ps.length && Math.random() < 0.6 ? pick(ps) : null, true);
+}
+
 function openGift(p, g) {
-  g.opened = true;
+  g.opened = true; giftsOpened++;
   if (p === local) tut.gifts++;
   burst(g.x, g.y, '#ffd166', 26, 220);
   confetti(g.x, g.y - 10, 34); shock(g.x, g.y, '#ffd166', 110, 0.4, 4); sfx('gift', g.x, g.y);
