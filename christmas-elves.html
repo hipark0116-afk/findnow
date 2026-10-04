@@ -1433,6 +1433,7 @@ function pickUpgrade(p, i) {
   if (!p.offers || !p.offers[i]) return;
   const u = UPG[p.offers[i]];
   u.fn(p);
+  sfx('card', p.x, p.y);
   p.picks = Math.max(0, (p.picks || 1) - 1);
   p.offers = p.picks > 0 ? rollOffers() : null;
   sparkle(p.x, p.y - 20, '#ffd166', 14, 160); sfx('scroll', p.x, p.y);
@@ -1449,12 +1450,13 @@ function addCombo(p) {
   p.combo = (p.comboT > 0 ? (p.combo || 0) : 0) + 1; p.comboT = 3;
   p.maxCombo = Math.max(p.maxCombo || 0, p.combo);
   if (p.combo % 30 === 0) startFever(p);
-  else if (p.combo === 10 || p.combo === 20 || p.combo % 50 === 0) addFloat({ x: p.x, y: p.y - 62, text: p.combo + ' COMBO!', color: '#ff9a3c', t: 0, life: 1.1, size: 22 });
+  else if (p.combo === 10 || p.combo === 20 || p.combo % 50 === 0) sfx('combo', p.x, p.y);
+  if (p.combo % 30 !== 0 && (p.combo === 10 || p.combo === 20 || p.combo % 50 === 0)) addFloat({ x: p.x, y: p.y - 62, text: p.combo + ' COMBO!', color: '#ff9a3c', t: 0, life: 1.1, size: 22 });
 }
 function startFever(p) {
   p.feverT = 8 + (p.feverAdd || 0); p.fevers = (p.fevers || 0) + 1;
   addFloat({ x: p.x, y: p.y - 66, text: '🔥 FEVER TIME!', color: '#ff7b3c', t: 0, life: 1.6, size: 28 });
-  shock(p.x, p.y, '#ff9a3c', 220, 0.6, 7); sparkle(p.x, p.y - 20, '#ffd166', 18, 220); sfx('levelup', p.x, p.y);
+  shock(p.x, p.y, '#ff9a3c', 220, 0.6, 7); sparkle(p.x, p.y - 20, '#ffd166', 18, 220); sfx('fever', p.x, p.y);
   notify(p, 'T', '🔥 피버 타임! ' + Math.round(p.feverT) + '초 동안 공격과 이동이 빨라져요', '#ff9a3c');
   if (p === local) flashScreen('#ffcf80', 0.2);
 }
@@ -1478,7 +1480,7 @@ function startWorldEvent(id) {
   if (!ps.length) { worldEvT = 10; return; }
   worldEv = { id, t: E.dur, dur: E.dur };
   toastAll(E.name, E.color);
-  sfx('alert'); rec(['s', null, null, 'alert']);
+  sfx('alert'); sfx('ev_' + id);
   if (id === 'sleigh') {
     const q = pick(ps), a = Math.random() * Math.PI * 2;
     const pts = [q.x - Math.cos(a) * 1300, q.y - Math.sin(a) * 1300 - 100, q.x + Math.cos(a) * 1300, q.y + Math.sin(a) * 1300 - 100].map(Math.round);
@@ -1613,6 +1615,73 @@ const PETS = [
   { id: 'angel',     r: 4, name: '크리스마스 천사', body: '#fff6e0', ear: 'none', acc: 'halo',     bonus: { dmg: 0.2, regen: 2, armor: 0.1 },  desc: '공격력 +20% · 회복 +2/초 · 피해 -10%' },
 ];
 const PET = Object.fromEntries(PETS.map(q => [q.id, q]));
+// 펫마다 다른 공격 모양과 맞았을 때의 효과
+const PET_FX = {
+  bunny:     { shot: 'flake',    c: '#dff4ff', spd: 600, hit: 'slow' },
+  penguin:   { shot: 'fish',     c: '#6fb8ff', spd: 640, hit: 'slow' },
+  cookie:    { shot: 'cookie',   c: '#c98a4b', spd: 560, hit: 'crumb' },
+  snowkid:   { shot: 'snowball', c: '#ffffff', spd: 600, hit: 'slow' },
+  puppy:     { shot: 'heart',    c: '#ff5a7a', spd: 620, hit: 'heart' },
+  cat:       { shot: 'yarn',     c: '#ff7ab0', spd: 560, hit: 'heart' },
+  bear:      { shot: 'ice',      c: '#9fe3ff', spd: 700, hit: 'slow' },
+  squirrel:  { shot: 'candy',    c: '#ff4d6d', spd: 620, hit: 'crumb' },
+  owl:       { shot: 'star',     c: '#ffd166', spd: 760, hit: 'star' },
+  santabear: { shot: 'gift',     c: '#e63946', spd: 560, hit: 'boom' },
+  fox:       { shot: 'aurora',   c: '#5ad0c0', spd: 820, hit: 'star' },
+  dragon:    { shot: 'fire',     c: '#ff7b3c', spd: 640, hit: 'boom' },
+  goldeer:   { shot: 'bolt',     c: '#ffe066', spd: 900, hit: 'zap' },
+  angel:     { shot: 'holy',     c: '#fff3c4', spd: 780, hit: 'holy' },
+};
+function petHit(b, e) {                                 // 방장만: 펫 탄환이 맞았을 때
+  const F = PET_FX[b.pt]; if (!F) return;
+  const o = b.owner;
+  if (F.hit === 'slow') { if (e.kind !== 'boss') e.slowT = Math.max(e.slowT, 1.2); sparkle(b.x, b.y, '#dff4ff', 5, 110, 0.5); }
+  else if (F.hit === 'crumb') burst(b.x, b.y, F.c, 7, 140);
+  else if (F.hit === 'heart') { sparkle(b.x, b.y, '#ff8fb0', 6, 120, 0.6); if (Math.random() < 0.25) addFloat({ x: b.x, y: b.y - 16, text: '♥', color: '#ff5a7a', t: 0, life: 0.7, size: 18 }); }
+  else if (F.hit === 'star') sparkle(b.x, b.y, F.c, 8, 170, 0.6);
+  else if (F.hit === 'boom') {
+    shock(b.x, b.y, F.c, 80, 0.35, 4); burst(b.x, b.y, F.c, 12, 180); sfx('bomb', b.x, b.y);
+    for (const e2 of enemies) if (e2 !== e && !e2.dead && dist(e2.x, e2.y, b.x, b.y) < 75 + e2.r) damageEnemy(e2, b.dmg * 0.4, o);
+  } else if (F.hit === 'zap') {
+    let best = null, bd = 230;
+    for (const e2 of enemies) if (e2 !== e && !e2.dead && !e2.burrowed) { const d = dist(e2.x, e2.y, e.x, e.y); if (d < bd) { bd = d; best = e2; } }
+    if (best) {
+      const pts = [[e.x, e.y], [best.x, best.y]];
+      zaps.push({ pts, t: 0 }); rec(['z', Math.round(e.x), Math.round(e.y), pts.map(q => [Math.round(q[0]), Math.round(q[1])])]);
+      damageEnemy(best, b.dmg * 0.5, o); sfx('zap', e.x, e.y);
+    }
+    sparkle(b.x, b.y, '#ffe066', 6, 150, 0.5);
+  } else if (F.hit === 'holy') {
+    if (o && !o.dead) { o.hp = Math.min(o.maxHp, o.hp + o.maxHp * 0.015); if (Math.random() < 0.2) addFloat({ x: o.x, y: o.y - 40, text: '💗', color: '#ff8fb0', t: 0, life: 0.8, size: 16 }); }
+    sparkle(b.x, b.y, '#ffffff', 10, 180, 0.7); glowPuff(b.x, b.y, '#fff3c4', 40, 0.25);
+  }
+}
+// 펫 탄환 그리기 (방장/친구 화면 모두)
+function drawPetShotRaw(c, b) {
+  const F = PET_FX[b.pt] || PET_FX.bunny, t = gtime * 8 + b.x * 0.013, ang = Math.atan2(b.vy, b.vx), x = b.x, y = b.y;
+  c.save();
+  c.globalCompositeOperation = 'lighter'; c.globalAlpha = 0.5; c.drawImage(glowSprite(F.c), x - 16, y - 16, 32, 32);
+  c.globalCompositeOperation = 'source-over'; c.globalAlpha = 1;
+  c.translate(x, y);
+  switch (F.shot) {
+    case 'flake': c.rotate(t); c.strokeStyle = '#ffffff'; c.lineWidth = 2.5; c.beginPath(); for (let i = 0; i < 3; i++) { const q = i * Math.PI / 3; c.moveTo(-Math.cos(q) * 7, -Math.sin(q) * 7); c.lineTo(Math.cos(q) * 7, Math.sin(q) * 7); } c.stroke(); c.fillStyle = '#bfe9ff'; circle(c, 0, 0, 2.2); c.fill(); break;
+    case 'fish': c.rotate(ang); c.fillStyle = '#6fb8ff'; c.beginPath(); c.ellipse(0, 0, 8, 4.5, 0, 0, Math.PI * 2); c.fill(); c.beginPath(); c.moveTo(-6, 0); c.lineTo(-13, -5); c.lineTo(-13, 5); c.closePath(); c.fill(); c.fillStyle = '#1a1a2a'; circle(c, 4, -1, 1.2); c.fill(); break;
+    case 'cookie': c.rotate(t * 0.5); c.fillStyle = '#c98a4b'; circle(c, 0, 0, 6.5); c.fill(); c.fillStyle = '#5a3020'; circle(c, -2, -2, 1.3); c.fill(); circle(c, 2.5, 1, 1.3); c.fill(); circle(c, -1, 3, 1.1); c.fill(); break;
+    case 'snowball': c.fillStyle = '#ffffff'; circle(c, 0, 0, 6.5); c.fill(); c.fillStyle = 'rgba(150,200,255,0.5)'; c.beginPath(); c.arc(1.5, 1.5, 4.5, 0, Math.PI); c.fill(); break;
+    case 'heart': c.rotate(Math.sin(t) * 0.3); c.fillStyle = '#ff5a7a'; c.beginPath(); c.moveTo(0, 5); c.bezierCurveTo(-9, -1, -5, -9, 0, -4); c.bezierCurveTo(5, -9, 9, -1, 0, 5); c.fill(); break;
+    case 'yarn': c.rotate(t); c.fillStyle = '#ff7ab0'; circle(c, 0, 0, 6.5); c.fill(); c.strokeStyle = '#c23a6a'; c.lineWidth = 1; c.beginPath(); c.arc(0, 0, 4, 0.3, 2.6); c.moveTo(-5, 2); c.quadraticCurveTo(0, -3, 5, 2); c.stroke(); break;
+    case 'ice': c.rotate(ang); c.fillStyle = '#9fe3ff'; c.beginPath(); c.moveTo(10, 0); c.lineTo(0, -4.5); c.lineTo(-9, 0); c.lineTo(0, 4.5); c.closePath(); c.fill(); c.fillStyle = 'rgba(255,255,255,0.8)'; c.fillRect(-3, -1, 9, 1.6); break;
+    case 'candy': c.rotate(t); c.fillStyle = '#ffffff'; circle(c, 0, 0, 6.5); c.fill(); c.fillStyle = '#ff4d6d'; for (let i = 0; i < 4; i++) { c.beginPath(); c.moveTo(0, 0); c.arc(0, 0, 6.5, i * Math.PI / 2, i * Math.PI / 2 + 0.7); c.closePath(); c.fill(); } break;
+    case 'star': c.strokeStyle = 'rgba(255,209,102,0.6)'; c.lineWidth = 3; c.beginPath(); c.moveTo(-Math.cos(ang) * 22, -Math.sin(ang) * 22); c.lineTo(0, 0); c.stroke(); c.rotate(t); drawStar(c, 0, 0, 8, 3.6, '#ffd166'); break;
+    case 'gift': c.rotate(t * 0.6); c.fillStyle = '#e63946'; c.fillRect(-5.5, -5.5, 11, 11); c.fillStyle = '#ffd166'; c.fillRect(-1.5, -5.5, 3, 11); c.fillRect(-5.5, -1.5, 11, 3); break;
+    case 'aurora': { c.rotate(ang); const g = c.createLinearGradient(-34, 0, 4, 0); g.addColorStop(0, 'rgba(90,208,192,0)'); g.addColorStop(0.6, '#7dffa8'); g.addColorStop(1, '#5ad0c0'); c.strokeStyle = g; c.lineWidth = 7; c.lineCap = 'round'; c.beginPath(); c.moveTo(-34, Math.sin(t) * 3); c.quadraticCurveTo(-16, -6, 4, 0); c.stroke(); c.strokeStyle = '#ffffff'; c.lineWidth = 2; c.stroke(); break; }
+    case 'fire': c.rotate(ang); for (let i = 3; i >= 0; i--) { c.fillStyle = ['#ffef9a', '#ffb347', '#ff7b3c', '#e0401a'][i]; circle(c, -i * 6, Math.sin(t + i) * 1.5, 7 - i * 1.3); c.fill(); } break;
+    case 'bolt': c.rotate(ang); c.strokeStyle = '#ffe066'; c.lineWidth = 3.5; c.lineJoin = 'round'; c.beginPath(); c.moveTo(-28, 0); c.lineTo(-19, -5); c.lineTo(-11, 4); c.lineTo(-3, -4); c.lineTo(6, 0); c.stroke(); c.strokeStyle = '#ffffff'; c.lineWidth = 1.4; c.stroke(); break;
+    case 'holy': c.strokeStyle = 'rgba(255,230,160,0.9)'; c.lineWidth = 2; circle(c, 0, 0, 9 + Math.sin(t) * 1.5); c.stroke(); c.fillStyle = '#ffffff'; circle(c, 0, 0, 4.5); c.fill(); c.fillStyle = '#ffd166'; c.fillRect(-0.8, -8, 1.6, 16); c.fillRect(-8, -0.8, 16, 1.6); break;
+  }
+  c.restore();
+}
+const drawPetShot = inked(drawPetShotRaw, 1.1);
 const PET_ATK = [{ dmg: 8, rate: 1.2 }, { dmg: 13, rate: 1.0 }, { dmg: 20, rate: 0.8 }, { dmg: 32, rate: 0.6 }, { dmg: 50, rate: 0.45 }];
 // 펫이 주는 능력 (같은 펫을 또 뽑으면 펫 레벨이 올라 20%씩 강해져요)
 function petB(p, k) {
@@ -1624,9 +1693,13 @@ function setPet(p, id) {
   const old = p.pet && PET[p.pet] ? PET[p.pet].bonus.hp || 0 : 0, nw = PET[id] ? PET[id].bonus.hp || 0 : 0;
   p.pet = id; p.maxHp += nw - old; p.hp = Math.min(p.maxHp, p.hp + Math.max(0, nw - old));
 }
+// 뽑을수록 비싸져요: 1·1·2·2·3·3·4… 레벨
+function gachaCost(p) { return 1 + Math.floor((p.pulls || 0) / 2); }
 function gachaPull(p) {
-  if (p.level < 2) return 'err:레벨 2부터 뽑을 수 있어요!';
-  p.level--; p.maxHp = Math.max(60, p.maxHp - 8); p.hp = Math.min(p.hp, p.maxHp); p.dmgMul = Math.max(0.6, p.dmgMul - 0.07);
+  const cost = gachaCost(p);
+  if (p.level <= cost) return 'err:이번 뽑기는 레벨 ' + cost + '이 필요해요! (Lv.' + (cost + 1) + '부터)';
+  for (let i = 0; i < cost; i++) { p.level--; p.maxHp = Math.max(60, p.maxHp - 8); p.dmgMul = Math.max(0.6, p.dmgMul - 0.07); }
+  p.hp = Math.min(p.hp, p.maxHp); p.pulls = (p.pulls || 0) + 1;
   p.xpNext = Math.round(12 + p.level * 9); p.xp = Math.min(p.xp, p.xpNext - 1);
   if (Math.random() < GACHA_MISS) return 'miss';
   let v = Math.random(), r = 0;
@@ -1639,6 +1712,18 @@ function gachaPull(p) {
   return pet.id + (dup ? '+' : '');
 }
 // 펫은 주인 뒤를 졸졸 따라와요
+// 내 엘프 주변 소리: 발소리 · 지역 소리 · 체력이 낮을 때 심장 소리
+const ambient = { step: 0, amb: 3, heart: 0 };
+function updateAmbience(dt) {
+  if (!local || local.dead || local.inShop || state !== 'play' || paused) return;
+  const b = biomeAt(local.x, local.y).id;
+  if (local.moving && local.dashT <= 0) { ambient.step -= dt; if (ambient.step <= 0) { ambient.step = 0.3 / Math.max(0.7, local.speed / 240); sfxLocal('step_' + b, 0.8); } }
+  ambient.amb -= dt;
+  if (ambient.amb <= 0) { ambient.amb = rand(4, 8) * (DIFF.calm ? 0.7 : 1); sfxLocal('amb_' + b, DIFF.calm ? 1.2 : 0.9); }
+  if (local.hp < local.maxHp * 0.25) { ambient.heart -= dt; if (ambient.heart <= 0) { ambient.heart = 0.85; sfxLocal('heart'); } }
+  // 가끔 내 펫이 혼자 귀엽게 울어요
+  if (local.pet && Math.random() < dt / 12) sfxLocal('pet_' + local.pet, 0.7);
+}
 function updatePets(dt) {
   for (const p of players) {
     if (!p.pet) continue;
@@ -1649,6 +1734,7 @@ function updatePets(dt) {
     p.petX = lerp(p.petX, tx, k); p.petY = lerp(p.petY, ty, k);
     p.petBob = -Math.abs(Math.sin(gtime * 9 + p.id)) * (Math.abs(p.petX - ox) > 0.3 ? 6 : 1.5);
     if (Math.abs(p.petX - ox) > 0.2) p.petFace = p.petX > ox ? 1 : -1;
+    if (p.petAtkT > 0) p.petAtkT -= dt;
   }
 }
 function updatePetAttacks(dt) {                         // 방장(혼자일 땐 내 컴퓨터)만
@@ -1662,13 +1748,18 @@ function updatePetAttacks(dt) {                         // 방장(혼자일 땐 
     const A = PET_ATK[d.r], lv = (p.petLv && p.petLv[p.pet]) || 0;
     p.petCd = A.rate;
     const dmg = A.dmg * (1 + 0.25 * lv) * (1 + 0.04 * p.level), col = RARITY[d.r].c;
+    const F = PET_FX[d.id] || PET_FX.bunny;
     const n = d.r >= 3 ? 3 : 1, base = Math.atan2(t.y - p.petY, t.x - p.petX);
     for (let i = 0; i < n; i++) {
       const a = base + (n > 1 ? (i - 1) * 0.18 : 0);
-      bullets.push({ x: p.petX, y: p.petY - 6, vx: Math.cos(a) * 620, vy: Math.sin(a) * 620, a, r: 5 + d.r, dmg, life: 0.9, color: col, type: 'pet',
+      bullets.push({ x: p.petX, y: p.petY - 6, vx: Math.cos(a) * F.spd, vy: Math.sin(a) * F.spd, a, r: 5 + d.r, dmg, life: 0.9, color: F.c, type: 'pet', pt: d.id,
         pierce: d.r >= 4 ? 3 : 0, explode: 0, hit: new Set(), owner: p, boomer: false, wave: false, age: 0, spin: 0 });
     }
-    glowPuff(p.petX, p.petY - 6, col, 12, 0.1);
+    glowPuff(p.petX, p.petY - 6, F.c, 16, 0.12); sparkle(p.petX, p.petY - 10, F.c, 4, 90, 0.4);
+    p.petAtkT = 0.22;
+    sfx('petshot', p.petX, p.petY);
+    p.petVoiceT = (p.petVoiceT || 0) - A.rate;
+    if (p.petVoiceT <= 0) { p.petVoiceT = rand(2.5, 4.5); sfx('pet_' + d.id, p.petX, p.petY); }
   }
 }
 // 인형 같은 펫 그리기
@@ -1741,13 +1832,13 @@ function enterShop(q) {
   local.inShop = true; local.vx = local.vy = 0; mouse.down = false;
   touchUI.move = touchUI.aim = null; recalcTouch();
   if (Net.mode === 'client') Net.host.send({ t: 'shop', on: 1 });
-  sfx('gift'); sfx('click');
+  sfxLocal('shopbell'); sfxLocal('click');
 }
 function exitShop() {
   if (!shopUI || shopUI.phase !== 'in' || (shopUI.pull && !shopUI.res)) return;
   shopUI.phase = 'exit'; shopUI.t = 0; shopUI.res = null;
   iris = { t: 0, dur: 0.55, open: false, at: 'center' };
-  sfx('click');
+  sfxLocal('shopbell');
 }
 function finishExit() {
   const q = shopUI.s;
@@ -1773,12 +1864,13 @@ function updateShopUI(dt) {
       P.miss = P.result === 'miss';
       P.vis = P.miss ? PET[pick(PILE).id] : PET[P.result.replace('+', '')];
     }
+    // 집게 소리: 내려가기 → 잡기 → 올라오기 → (꽝이면 툭) → 상품 떨어짐
+    const steps = [[1.0, 'claw_drop'], [1.75, 'claw_grab'], [2.1, 'claw_up'], [2.5, P.miss ? 'aww' : ''], [2.9, 'claw_move'], [3.85, P.miss ? '' : 'prize_drop']];
+    while (P.snd < steps.length && P.t >= steps[P.snd][0]) { if (steps[P.snd][1]) sfxLocal(steps[P.snd][1]); P.snd++; }
     if (P.t >= 4.3) {
       u.res = { t: 0, miss: P.miss, pet: P.miss ? null : PET[P.result.replace('+', '')], dup: P.result.endsWith('+') };
-      if (P.miss) sfx('hurt');
-      else if (u.res.pet.r >= 3) { sfx('firework'); sfx('levelup'); }
-      else if (u.res.pet.r === 2) sfx('levelup');
-      else sfx('gift');
+      if (P.miss) sfxLocal('hurt');
+      else { sfxLocal('reveal' + u.res.pet.r); setTimeout(() => sfxLocal('pet_' + u.res.pet.id), 450); }
     }
   }
   if (u.res) u.res.t += dt;
@@ -1787,10 +1879,11 @@ function shopScene() { return !!shopUI && shopUI.phase !== 'enter'; }
 function startPull() {
   const u = shopUI;
   if (!u || u.phase !== 'in' || u.pull || u.res) return;
-  if (local.level < 2) { u.msg = '레벨 2부터 뽑을 수 있어요! 어둠을 물리쳐 레벨을 올려 봐요'; u.msgT = 2.6; sfx('click'); return; }
-  u.pull = { t: 0, tx: rand(272, 430), result: null, vis: null, miss: false };
-  sfx('click');
-  if (Net.mode === 'client') { Net.host.send({ t: 'gacha' }); local.level--; }
+  const cost = gachaCost(local);
+  if (local.level <= cost) { u.msg = '이번 뽑기는 레벨 ' + cost + '이 필요해요! (Lv.' + (cost + 1) + '부터) 어둠을 물리쳐 레벨을 올려 봐요'; u.msgT = 2.8; sfx('click'); return; }
+  u.pull = { t: 0, tx: rand(272, 430), result: null, vis: null, miss: false, snd: 0 };
+  sfx('coin'); sfxLocal('claw_move');
+  if (Net.mode === 'client') { Net.host.send({ t: 'gacha' }); local.level -= cost; local.pulls = (local.pulls || 0) + 1; }
   else u.pull.result = gachaPull(local);
 }
 function onGachaResult(r) { if (shopUI && shopUI.pull && !shopUI.pull.result) shopUI.pull.result = r; }
@@ -1798,7 +1891,7 @@ function closeResult() { if (shopUI && shopUI.res && shopUI.res.t > 0.4) { shopU
 function equipPet(id) {
   if (!local.pets || !local.pets.includes(id)) return;
   if (Net.mode === 'client') { Net.host.send({ t: 'pet', id }); local.pet = id; } else setPet(local, id);
-  sfx('click');
+  sfxLocal('pet_' + id);
 }
 function shopKey(code) {
   if (!shopUI) return;
@@ -1936,13 +2029,14 @@ function drawShopScene(dt) {
   c.fillStyle = '#ff5a67'; circle(c, 239 + (P && P.t < 1 ? 8 : 0), 506, 11); c.fill();
   c.fillStyle = P ? '#ffd166' : '#5fd07a'; circle(c, 420, 520, 22); c.fill();
   INK.on--; INK.w = 1.7;
-  c.save(); c.textAlign = 'center'; c.font = FONT(18); c.fillStyle = '#fffaf0'; c.fillText('레벨 1 = 1회', 330, 528); c.restore();
+  c.save(); c.textAlign = 'center'; c.font = FONT(18); c.fillStyle = '#fffaf0'; c.fillText('이번 뽑기: 레벨 ' + gachaCost(local), 330, 528); c.restore();
   // ===== 오른쪽 안내판 =====
   paperPanel(c, 520, 124, 450, 456, 16);
   garland(c, 540, 124, 410);
   c.textAlign = 'left'; c.font = FONT(26); c.fillStyle = '#c8372d'; c.fillText('🧸 펫 뽑기', 544, 166);
-  c.font = FONT(20); c.fillStyle = '#3b2416'; c.fillText('내 레벨 Lv.' + local.level + (local.level < 2 ? '  (Lv.2부터 뽑을 수 있어요)' : ''), 544, 196);
-  c.font = FONT(15); c.fillStyle = '#7a5a44'; c.fillText('레벨을 1 쓰면 체력·공격력도 조금 내려가요. 꽝일 수도 있어요!', 544, 218);
+  const cost = gachaCost(local), nextCost = 1 + Math.floor(((local.pulls || 0) + 1) / 2);
+  c.font = FONT(20); c.fillStyle = '#3b2416'; c.fillText('내 레벨 Lv.' + local.level + '  ·  이번 뽑기 = 레벨 ' + cost + (nextCost > cost ? ' (다음엔 ' + nextCost + ')' : ''), 544, 196);
+  c.font = FONT(15); c.fillStyle = '#7a5a44'; c.fillText('뽑을수록 비싸져요! 레벨을 쓰면 체력·공격력도 조금 내려가요. 꽝도 있어요', 544, 218, 410);
   for (let i = 0; i < RARITY.length; i++) {
     const R = RARITY[i], y = 244 + i * 25;
     c.fillStyle = R.c; circle(c, 552, y - 6, 7); c.fill(); c.strokeStyle = '#3b2416'; c.lineWidth = 1.4; c.stroke();
@@ -1952,7 +2046,7 @@ function drawShopScene(dt) {
   }
   c.font = FONT(17); c.fillStyle = '#7a5a44'; c.fillText('꽝 (미끄러짐) ' + (GACHA_MISS * 100) + '%', 566, 244 + 5 * 25);
   const busy = !!u.pull;
-  shopButton(c, 544, 386, 200, 58, '🎰 뽑기! (Space)', '#c8372d', !busy && local.level >= 2);
+  shopButton(c, 544, 386, 200, 58, '🎰 뽑기! (Lv -' + cost + ')', '#c8372d', !busy && local.level > cost);
   shopButton(c, 760, 386, 190, 58, '🚪 나가기 (Esc)', '#4d7a3a', !busy);
   shopZone(L, 544, 386, 200, 58, startPull);
   shopZone(L, 760, 386, 190, 58, exitShop);
@@ -2330,6 +2424,7 @@ function damageEnemy(e, dmg, src) {
   e.hp -= dmg; e.flash = 0.08;
   if (e.kind === 'boss' && !e.awake) wakeBoss(e);
   const big = dmg >= 40;
+  if (crit) sfx('crit', e.x, e.y);
   if (crit) addFloat({ x: e.x + rand(-10, 10), y: e.y - e.r - 10 - (e.z || 0), text: '💥' + Math.round(dmg), color: '#ff8a3c', t: 0, life: 0.9, size: (e.kind === 'boss' ? 23 : 20) });
   else addFloat({ x: e.x + rand(-10, 10), y: e.y - e.r - 6 - (e.z || 0), text: Math.round(dmg) + (big ? '!' : ''), color: big ? '#ffd166' : '#ffffff', t: 0, life: big ? 0.8 : 0.6, size: (e.kind === 'boss' ? 17 : 14) + (big ? 6 : 0) });
   glowPuff(e.x + rand(-e.r, e.r) * 0.4, e.y - (e.z || 0) + rand(-e.r, e.r) * 0.4, '#ffffff', big ? 22 : 12, 0.12);
@@ -3120,7 +3215,7 @@ function openGift(p, g) {
   if (!g.tutorial && tut.done && Math.random() < (DIFF.calm ? 0.02 : 0.07)) {
     const e = makeEnemy('mimic', g.x, g.y, zoneAt(g.x, g.y));
     enemies.push(e);
-    burst(g.x, g.y, '#b3302a', 24, 240); shock(g.x, g.y, '#ff5a67', 120, 0.4, 5); sfx('roar', g.x, g.y);
+    burst(g.x, g.y, '#b3302a', 24, 240); shock(g.x, g.y, '#ff5a67', 120, 0.4, 5); sfx('mimic', g.x, g.y);
     notify(p, 'T', '😱 으악! 선물상자가 미믹이었어요! 물리치면 진짜 선물을 줘요', '#ff5a67');
     if (p === local) achFlags.mimic = 1;
     return;
@@ -3527,6 +3622,7 @@ function update(dt) {
       if (dist(b.x, b.y, e.x, e.y - ez) < e.r + b.r) {
         if (b.explode) { explode(b.x, b.y, b.explode, b.dmg, b.owner); b.dead = true; break; }
         damageEnemy(e, b.dmg, b.owner);
+        if (b.pt) petHit(b, e);
         b.hit.add(e);
         particles.push({ x: b.x, y: b.y, vx: rand(-80, 80), vy: rand(-80, 80), life: 0.25, max: 0.25, color: b.color, size: 4 });
         if (b.pierce > 0) b.pierce--; else { b.dead = true; break; }
@@ -3850,6 +3946,63 @@ function bell(f, vol, delay = 0) {
   tone(f, 1.3, { vol, delay }); tone(f * 2.76, 0.7, { vol: vol * 0.35, delay }); tone(f * 5.4, 0.35, { vol: vol * 0.18, delay });
 }
 const SFXS = {
+
+  // ----- 펫 목소리 (귀여운 소리) -----
+  pet_bunny: v => { tone(1800, 0.06, { type: 'sine', to: 2600, vol: 0.07 * v }); tone(2200, 0.06, { type: 'sine', to: 3000, vol: 0.06 * v, delay: 0.08 }); },
+  pet_penguin: v => { tone(760, 0.11, { type: 'square', to: 520, lp: 1800, vol: 0.05 * v }); tone(820, 0.1, { type: 'square', to: 560, lp: 1800, vol: 0.045 * v, delay: 0.13 }); },
+  pet_cookie: v => { noise(0.05, { ft: 'highpass', f: 2500, vol: 0.08 * v }); arp(['E6', 'G6', 'C7'], 0.05, 'triangle', 0.05 * v, 0.1); },
+  pet_snowkid: v => { bell(1318, 0.06 * v); tone(988, 0.15, { type: 'sine', vol: 0.04 * v, delay: 0.1 }); },
+  pet_puppy: v => { tone(560, 0.08, { type: 'sawtooth', to: 330, lp: 1400, vol: 0.07 * v }); tone(600, 0.07, { type: 'sawtooth', to: 360, lp: 1400, vol: 0.06 * v, delay: 0.12 }); },
+  pet_cat: v => { tone(620, 0.22, { type: 'triangle', to: 980, slide: 0.12, vib: 7, vol: 0.07 * v }); tone(980, 0.2, { type: 'triangle', to: 560, vib: 7, vol: 0.06 * v, delay: 0.16 }); },
+  pet_bear: v => { tone(190, 0.32, { type: 'triangle', to: 250, vib: 4, vol: 0.12 * v }); tone(1400, 0.05, { type: 'sine', to: 1900, vol: 0.04 * v, delay: 0.3 }); },
+  pet_squirrel: v => { for (let i = 0; i < 5; i++) tone(2300 + Math.random() * 500, 0.03, { type: 'sine', to: 2900, vol: 0.05 * v, delay: i * 0.045 }); },
+  pet_owl: v => { tone(430, 0.18, { type: 'sine', to: 390, vol: 0.1 * v }); tone(430, 0.26, { type: 'sine', to: 360, vol: 0.09 * v, delay: 0.24 }); },
+  pet_santabear: v => { tone(230, 0.13, { type: 'triangle', to: 200, vol: 0.1 * v }); tone(230, 0.15, { type: 'triangle', to: 190, vol: 0.1 * v, delay: 0.17 }); for (let i = 0; i < 4; i++) noise(0.05, { ft: 'highpass', f: 7000, vol: 0.06 * v, delay: 0.05 + i * 0.07 }); },
+  pet_fox: v => { tone(1100, 0.07, { type: 'square', to: 1700, lp: 3000, vol: 0.05 * v }); tone(1300, 0.07, { type: 'square', to: 1900, lp: 3000, vol: 0.04 * v, delay: 0.1 }); },
+  pet_dragon: v => { tone(300, 0.3, { type: 'sawtooth', to: 540, lp: 1300, vib: 12, vol: 0.07 * v }); noise(0.35, { ft: 'bandpass', f: 900, fto: 300, vol: 0.08 * v, delay: 0.1 }); },
+  pet_goldeer: v => { for (let i = 0; i < 6; i++) noise(0.05, { ft: 'highpass', f: 6500, vol: 0.07 * v, delay: i * 0.06 }); bell(1568, 0.06 * v, 0.1); },
+  pet_angel: v => { arp(['C6', 'E6', 'G6', 'C7', 'E7'], 0.05, 'sine', 0.05 * v, 0.5); tone(523, 0.9, { type: 'sine', attack: 0.25, vol: 0.05 * v }); tone(659, 0.9, { type: 'sine', attack: 0.25, vol: 0.04 * v }); },
+  petshot: v => tone(1300 + Math.random() * 400, 0.05, { type: 'sine', to: 900, vol: 0.035 * v }),
+  // ----- 전투 & 보상 -----
+  crit: v => { tone(2400, 0.08, { type: 'triangle', to: 3200, vol: 0.06 * v }); noise(0.05, { ft: 'highpass', f: 5000, vol: 0.05 * v }); },
+  combo: v => arp(['C6', 'E6', 'G6', 'C7'], 0.04, 'square', 0.03 * v, 0.12),
+  fever: v => { arp(['G5', 'C6', 'E6', 'G6', 'C7'], 0.06, 'square', 0.05 * v, 0.2); tone(130, 0.5, { type: 'sawtooth', lp: 600, vol: 0.12 * v }); noise(0.4, { ft: 'highpass', f: 6000, vol: 0.06 * v, delay: 0.25 }); },
+  card: v => { tone(880, 0.08, { type: 'triangle', vol: 0.06 * v }); tone(1320, 0.12, { type: 'triangle', vol: 0.05 * v, delay: 0.07 }); },
+  mimic: v => { tone(140, 0.25, { type: 'sawtooth', to: 70, lp: 800, vol: 0.18 * v }); noise(0.12, { ft: 'bandpass', f: 600, vol: 0.12 * v, delay: 0.05 }); tone(90, 0.2, { type: 'square', lp: 500, vol: 0.1 * v, delay: 0.18 }); },
+  heart: v => { tone(70, 0.12, { type: 'sine', to: 50, vol: 0.25 * v }); tone(70, 0.1, { type: 'sine', to: 50, vol: 0.18 * v, delay: 0.16 }); },
+  // ----- 세계 이벤트 -----
+  ev_gold: v => { for (let i = 0; i < 8; i++) bell(1046 * Math.pow(1.122, i), 0.04 * v, i * 0.07); },
+  ev_blizzard: v => { noise(2.2, { ft: 'bandpass', f: 500, fto: 1600, q: 2, attack: 0.6, vol: 0.18 * v }); noise(1.6, { ft: 'bandpass', f: 1200, fto: 400, q: 3, attack: 0.4, vol: 0.1 * v, delay: 0.8 }); },
+  ev_sleigh: v => { for (let i = 0; i < 12; i++) noise(0.06, { ft: 'highpass', f: 6500, vol: 0.08 * v, delay: i * 0.08 }); tone(220, 0.16, { type: 'triangle', vol: 0.1 * v, delay: 0.3 }); tone(220, 0.16, { type: 'triangle', vol: 0.1 * v, delay: 0.5 }); tone(196, 0.3, { type: 'triangle', vol: 0.1 * v, delay: 0.7 }); },
+  ev_thief: v => { arp(['E5', 'G5', 'E5', 'C5', 'D5', 'B4'], 0.11, 'triangle', 0.06 * v, 0.08); },
+  // ----- 뽑기 가게 -----
+  shopbell: v => { bell(1760, 0.08 * v); bell(1318, 0.07 * v, 0.12); },
+  coin: v => { tone(1568, 0.06, { type: 'square', lp: 4000, vol: 0.05 * v }); tone(2093, 0.18, { type: 'square', lp: 4000, vol: 0.05 * v, delay: 0.06 }); },
+  claw_move: v => { tone(110, 0.9, { type: 'sawtooth', lp: 400, vol: 0.05 * v, vib: 18 }); },
+  claw_drop: v => { tone(300, 0.7, { type: 'triangle', to: 120, vol: 0.06 * v }); },
+  claw_grab: v => { noise(0.08, { ft: 'bandpass', f: 1500, vol: 0.14 * v }); tone(180, 0.12, { type: 'square', lp: 900, vol: 0.08 * v }); },
+  claw_up: v => { tone(120, 0.8, { type: 'triangle', to: 300, vol: 0.06 * v }); },
+  prize_drop: v => { tone(160, 0.2, { type: 'sine', to: 80, vol: 0.2 * v }); noise(0.1, { f: 800, vol: 0.1 * v }); },
+  aww: v => { tone(392, 0.25, { type: 'sawtooth', to: 370, lp: 1200, vol: 0.06 * v }); tone(370, 0.25, { type: 'sawtooth', to: 349, lp: 1200, vol: 0.06 * v, delay: 0.28 }); tone(349, 0.6, { type: 'sawtooth', to: 300, lp: 1200, vib: 6, vol: 0.06 * v, delay: 0.56 }); },
+  reveal0: v => { bell(1046, 0.08 * v); bell(1318, 0.06 * v, 0.1); },
+  reveal1: v => arp(['C6', 'E6', 'G6', 'C7'], 0.07, 'triangle', 0.07 * v, 0.4),
+  reveal2: v => { arp(['G5', 'C6', 'E6', 'G6', 'C7', 'E7'], 0.07, 'triangle', 0.07 * v, 0.5); bell(2093, 0.06 * v, 0.45); },
+  reveal3: v => { arp(['C5', 'E5', 'G5', 'C6', 'E6', 'G6', 'C7'], 0.08, 'square', 0.04 * v, 0.6); for (const n of ['C4', 'E4', 'G4', 'C5']) tone(noteFreq(n), 1.6, { type: 'sawtooth', lp: 1400, attack: 0.1, vol: 0.03 * v, delay: 0.55 }); for (let i = 0; i < 6; i++) bell(1568 + i * 200, 0.04 * v, 0.6 + i * 0.09); },
+  reveal4: v => { for (let k = 0; k < 2; k++) arp(['C5', 'G5', 'C6', 'E6', 'G6', 'C7', 'E7'], 0.06, 'square', 0.04 * v, 0.5); for (const n of ['C3', 'G3', 'C4', 'E4', 'G4', 'C5']) tone(noteFreq(n), 2.4, { type: 'sawtooth', lp: 1600, attack: 0.2, vol: 0.035 * v, delay: 0.5, vib: 4 }); for (let i = 0; i < 10; i++) bell(1046 * Math.pow(1.122, i), 0.05 * v, 0.6 + i * 0.08); },
+  // ----- 발소리 (땅마다 달라요) -----
+  step_snow: v => noise(0.07, { ft: 'lowpass', f: 1400, vol: 0.05 * v }),
+  step_ice: v => { tone(2600 + Math.random() * 400, 0.03, { type: 'triangle', vol: 0.02 * v }); noise(0.04, { ft: 'highpass', f: 4000, vol: 0.03 * v }); },
+  step_volcano: v => noise(0.06, { ft: 'bandpass', f: 500, vol: 0.06 * v }),
+  step_desert: v => noise(0.08, { ft: 'bandpass', f: 2600, q: 0.7, vol: 0.04 * v }),
+  step_jungle: v => noise(0.06, { ft: 'highpass', f: 1800, vol: 0.035 * v }),
+  step_swamp: v => { tone(160, 0.08, { type: 'sine', to: 90, vol: 0.06 * v }); noise(0.06, { ft: 'lowpass', f: 700, vol: 0.05 * v }); },
+  // ----- 지역마다 들리는 주변 소리 -----
+  amb_snow: v => { noise(1.8, { ft: 'bandpass', f: 400, fto: 900, q: 2, attack: 0.7, vol: 0.06 * v }); if (Math.random() < 0.4) bell(pick([1046, 1318, 1568]), 0.025 * v, 0.6); },
+  amb_ice: v => { for (let i = 0; i < 4; i++) tone(pick([2093, 2637, 3136, 3520]), 0.4, { type: 'sine', vol: 0.02 * v, delay: i * 0.13 }); },
+  amb_volcano: v => { tone(55, 1.4, { type: 'sine', to: 45, attack: 0.3, vol: 0.14 * v }); for (let i = 0; i < 6; i++) noise(0.03, { ft: 'highpass', f: 3000, vol: 0.04 * v, delay: 0.3 + Math.random() }); },
+  amb_desert: v => noise(2.2, { ft: 'bandpass', f: 700, fto: 1500, q: 4, attack: 0.9, vol: 0.06 * v }),
+  amb_jungle: v => { const f = rand(2200, 3200); for (let i = 0; i < 3; i++) tone(f, 0.08, { type: 'sine', to: f * 1.3, vol: 0.03 * v, delay: i * 0.12 }); tone(f * 0.8, 0.25, { type: 'sine', to: f * 0.6, vib: 20, vol: 0.02 * v, delay: 0.5 }); },
+  amb_swamp: v => { tone(120, 0.15, { type: 'square', to: 90, lp: 600, vol: 0.06 * v }); tone(130, 0.15, { type: 'square', to: 95, lp: 600, vol: 0.05 * v, delay: 0.25 }); },
   shoot_cane: v => tone(1046, 0.07, { type: 'square', to: 784, vol: 0.045 * v, lp: 3200 }),
   shoot_snow: v => { noise(0.1, { f: 1800, vol: 0.13 * v }); tone(260, 0.08, { type: 'triangle', to: 170, vol: 0.09 * v }); },
   shoot_icicle: v => tone(1760 + Math.random() * 300, 0.045, { type: 'triangle', to: 1300, vol: 0.04 * v }),
@@ -3893,7 +4046,15 @@ const SFXS = {
   click: v => tone(660, 0.06, { type: 'triangle', vol: 0.07 * v }),
   alert: v => arp(['A5', 'E6'], 0.08, 'square', 0.03 * v, 0.12),
 };
-const SFX_GAP = { dash: 0.15, hit: 0.035, xp: 0.03, kill: 0.04, eshot: 0.1, shoot_icicle: 0.06, shoot_turret: 0.12, explode: 0.06, burn: 0.45, firework: 0.12, hurt: 0.15 };
+const SFX_GAP = { petshot: 0.09, crit: 0.06, step_snow: 0.2, step_ice: 0.2, step_volcano: 0.2, step_desert: 0.2, step_jungle: 0.2, step_swamp: 0.2, heart: 0.5, claw_move: 0.3, dash: 0.15, hit: 0.035, xp: 0.03, kill: 0.04, eshot: 0.1, shoot_icicle: 0.06, shoot_turret: 0.12, explode: 0.06, burn: 0.45, firework: 0.12, hurt: 0.15 };
+// 내 화면에서만 나는 소리 (발소리·주변 소리·가게 소리 등은 친구에게 보내지 않아요)
+function sfxLocal(name, vm = 1) {
+  if (!Snd.ac || !Snd.sfxOn) return;
+  const now = Snd.ac.currentTime;
+  if (now - (Snd.last[name] || 0) < (SFX_GAP[name] || 0.02)) return;
+  Snd.last[name] = now;
+  const f = SFXS[name]; if (f) f(vm);
+}
 function sfx(name, x, y) {
   rec(['s', x === undefined ? null : Math.round(x), y === undefined ? null : Math.round(y), name]);
   if (!Snd.ac || !Snd.sfxOn) return;
@@ -3954,6 +4115,13 @@ const TRACKS = {
     { inst: 'bells', notes: rep(seq('X:1'), 24) },
   ] },
 };
+TRACKS.shop = { bpm: 96, voices: [            // 뽑기 가게: 오르골 「Deck the Halls」 (저작권이 끝난 곡)
+  { inst: 'box', notes: seq('G5:1.5 F5:.5 E5:1 D5:1 C5:1 D5:1 E5:1 C5:1 D5:.5 E5:.5 F5:.5 D5:.5 E5:1.5 D5:.5 C5:1 B4:1 C5:2 -:2 G5:1.5 F5:.5 E5:1 D5:1 C5:1 D5:1 E5:1 C5:1 D5:.5 E5:.5 F5:.5 D5:.5 E5:1.5 D5:.5 C5:1 B4:1 C5:2 -:2 D5:1.5 E5:.5 F5:1 D5:1 E5:1.5 F5:.5 G5:1 D5:1 E5:.5 F#5:.5 G5:1 A5:.5 B5:.5 C6:1 B5:1 A5:1 G5:2 -:2 G5:1.5 F5:.5 E5:1 D5:1 C5:1 D5:1 E5:1 C5:1 A5:.5 A5:.5 A5:.5 A5:.5 G5:1.5 F5:.5 E5:1 D5:1 C5:2 -:2') },
+  ...chordVoices(['C', 'C', 'F', 'G', 'C', 'C', 'C', 'F', 'G', 'C', 'G', 'G', 'Am', 'D', 'G', 'G', 'C', 'C', 'F', 'C', 'G', 'C'], 4),
+  { inst: 'bells', notes: rep(seq('X:2'), 44) },
+] };
+TRACKS.calm = { bpm: 64, voices: TRACKS.lobby.voices };        // 힐링 모드: 느린 「Silent Night」 오르골
+TRACKS.thrill = { bpm: 192, voices: TRACKS.explore.voices };    // 스릴 모드: 빠른 징글벨
 TRACKS.final = { bpm: 172, voices: TRACKS.boss.voices.map(v => v.inst === 'brass' ? { inst: 'lead', notes: v.notes } : v).concat([{ inst: 'brass', notes: rep(seq('A3:4 F3:4 G3:4 E3:4'), 2) }]) };
 function playInst(inst, n, t, dur) {
   if (!n || n === '-') return;
@@ -3974,8 +4142,9 @@ function pickMusic() {
   if (state === 'lobby') return 'lobby';
   if (state === 'ending' || state === 'win') return endingT > 20.5 || state === 'win' ? 'ending' : null;
   if (!local) return 'explore';
+  if (shopUI && shopUI.phase !== 'enter') return 'shop';
   for (const e of enemies) if (e.kind === 'boss' && e.awake && !e.dead && dist(e.x, e.y, local.x, local.y) < 1300) return e.id === 'lord' ? 'final' : 'boss';
-  return 'explore';
+  return DIFF.calm ? 'calm' : DIFF.id === 'thrill' ? 'thrill' : 'explore';
 }
 function musicUpdate() {
   if (!Snd.ac || Snd.ac.state !== 'running') return;
@@ -4301,10 +4470,10 @@ function hostSend(dt) {
       dm: p.dashCdMul, sx: Math.round(p.spawnX), sy: Math.round(p.spawnY),
       cb: p.combo || 0, ct: +(p.comboT || 0).toFixed(2), fv: +(p.feverT || 0).toFixed(1), mc: p.maxCombo || 0, fvs: p.fevers || 0,
       of: p.offers || 0, pk: p.picks || 0, cdm: p.cdMul || 1,
-      spT: +(p.speedT || 0).toFixed(1), pwT: +(p.powerT || 0).toFixed(1), shT: +(p.shieldT || 0).toFixed(1), pets: p.pets || [], pet: p.pet || '', pl: p.petLv || {},
+      spT: +(p.speedT || 0).toFixed(1), pwT: +(p.powerT || 0).toFixed(1), shT: +(p.shieldT || 0).toFixed(1), pets: p.pets || [], pet: p.pet || '', pl: p.petLv || {}, pu: p.pulls || 0,
     };
     msg.E = enemies.filter(e => !e.dead && (e.kind === 'boss' || near(e.x, e.y, 1500))).map(encEnemy);
-    msg.B = bullets.filter(b => near(b.x, b.y, 1100)).map(b => [Math.round(b.x), Math.round(b.y), Math.round(b.vx), Math.round(b.vy), b.type, Math.round(b.r), +b.life.toFixed(2)]);
+    msg.B = bullets.filter(b => near(b.x, b.y, 1100)).map(b => [Math.round(b.x), Math.round(b.y), Math.round(b.vx), Math.round(b.vy), b.type, Math.round(b.r), +b.life.toFixed(2), b.pt || '']);
     msg.Q = ebullets.filter(b => near(b.x, b.y, 1100)).map(b => [Math.round(b.x), Math.round(b.y), Math.round(b.vx), Math.round(b.vy), Math.round(b.r), ci(b.color)]);
     msg.H = hazards.filter(h => near(h.x, h.y, 1300)).map(h => [Math.round(h.x), Math.round(h.y), Math.round(h.r), +h.t.toFixed(2), +(h.delay || 0).toFixed(2), +(h.dur || 0).toFixed(1), h.team, ci(h.color)]);
     msg.K = pickups.filter(k => k.type === 'shard' || near(k.x, k.y, 1300)).map(k => [k.type, Math.round(k.x), Math.round(k.y)]);
@@ -4421,7 +4590,7 @@ function clientSnap(d) {
     Object.assign(local, { hp: m.hp, maxHp: m.maxHp, xp: m.xp, xpNext: m.xpNext, level: m.level, kills: m.kills, deaths: m.deaths, dead: !!m.dead, respawnT: m.rt, slowT: m.slow, dashCdMul: m.dm, spawnX: m.sx, spawnY: m.sy });
     local.invuln = Math.max(local.invuln, m.inv);
     Object.assign(local, { combo: m.cb || 0, comboT: m.ct || 0, feverT: m.fv || 0, maxCombo: m.mc || 0, fevers: m.fvs || 0, cdMul: m.cdm || 1,
-      speedT: m.spT || 0, powerT: m.pwT || 0, shieldT: m.shT || 0, pets: m.pets || [], pet: m.pet || null, petLv: m.pl || {} });
+      speedT: m.spT || 0, powerT: m.pwT || 0, shieldT: m.shT || 0, pets: m.pets || [], pet: m.pet || null, petLv: m.pl || {}, pulls: m.pu || 0 });
     if (performance.now() > (local.pkWait || 0)) { local.offers = m.of || null; local.picks = m.pk || 0; }
     local.weapons = m.w.map(([type, lvl]) => ({ type, lvl }));
     if (local.wIdx >= local.weapons.length) local.wIdx = 0;
@@ -4446,7 +4615,7 @@ function clientSnap(d) {
     next.push(e);
   }
   enemies = next;
-  bullets = d.B.map(([x, y, vx, vy, type, r, life]) => ({ x, y, vx, vy, type, r, life, a: Math.atan2(vy, vx), color: (WEAPONS[type] || {}).color || '#7dffa8', spin: Math.random() * 6 }));
+  bullets = d.B.map(([x, y, vx, vy, type, r, life, pt]) => ({ x, y, vx, vy, type, r, life, pt: pt || undefined, a: Math.atan2(vy, vx), color: pt && PET_FX[pt] ? PET_FX[pt].c : (WEAPONS[type] || {}).color || '#7dffa8', spin: Math.random() * 6 }));
   ebullets = d.Q.map(([x, y, vx, vy, r, c]) => ({ x, y, vx, vy, r, color: d.cols[c] }));
   hazards = d.H.map(([x, y, r, t, delay, dur, team, c]) => ({ x, y, r, t, delay, dur, team, color: d.cols[c] }));
   pickups = d.K.map(([type, x, y]) => ({ type, x, y, t: 0 }));
@@ -5728,7 +5897,7 @@ function drawWorld() {
   for (const a of allies) if (inView(a.x, a.y)) list.push({ y: a.y, f: () => drawAlly(a) });
   for (const sl of sleighs) list.push({ y: sl.y + 400, f: () => drawSleigh(sl) });
   for (const q of SHOPS) if (inView(q.x, q.y, 320)) list.push({ y: q.y + 40, f: () => drawShopBuilding(q) });
-  for (const q of players) if (q.pet && PET[q.pet] && !q.dead && !q.inShop && q.petX !== undefined && inView(q.petX, q.petY)) list.push({ y: q.petY, f: () => drawPetInk(ctx, PET[q.pet], q.petX, q.petY + q.petBob, 1.15, gtime, q.petFace || 1) });
+  for (const q of players) if (q.pet && PET[q.pet] && !q.dead && !q.inShop && q.petX !== undefined && inView(q.petX, q.petY)) list.push({ y: q.petY, f: () => drawPetInk(ctx, PET[q.pet], q.petX, q.petY + q.petBob, 1.15 * (1 + (q.petAtkT > 0 ? 0.2 * Math.sin(q.petAtkT / 0.22 * Math.PI) : 0)), gtime, q.petFace || 1) });
   if (inView(CX, CY, 900)) list.push({ y: CY + 60, f: drawTree });
   for (const t of turrets) if (inView(t.x, t.y)) list.push({ y: t.y, f: () => drawTurret(t) });
   for (const e of enemies) if (!e.dead && inView(e.x, e.y, 200)) list.push({ y: e.y, f: () => e.kind === 'boss' ? drawBoss(e) : drawSlime(e) });
@@ -5763,6 +5932,8 @@ function drawWorld() {
       c.beginPath(); c.arc(b.x - Math.cos(b.a) * b.r, b.y - Math.sin(b.a) * b.r, b.r * 1.5, b.a - 0.75, b.a + 0.75); c.stroke();
       c.strokeStyle = 'rgba(255,255,255,' + (0.6 * k) + ')'; c.lineWidth = 2;
       c.beginPath(); c.arc(b.x - Math.cos(b.a) * b.r, b.y - Math.sin(b.a) * b.r, b.r * 1.2, b.a - 0.6, b.a + 0.6); c.stroke();
+    } else if (b.type === 'pet') {
+      drawPetShot(c, b);
     } else {
       c.fillStyle = b.color; circle(c, b.x, b.y, b.r); c.fill();
     }
@@ -5775,7 +5946,7 @@ function drawWorld() {
     c.drawImage(glowSprite(b.color), b.x - sz, b.y - sz, sz * 2, sz * 2);
   }
   if (!fxLow) for (const b of bullets) {
-    if (!inView(b.x, b.y) || b.type === 'wreath' || b.type === 'bell') continue;
+    if (!inView(b.x, b.y) || b.type === 'wreath' || b.type === 'bell' || b.type === 'pet') continue;
     const sz = b.r * 3; c.globalAlpha = 0.5;
     c.drawImage(glowSprite(b.color), b.x - sz, b.y - sz, sz * 2, sz * 2);
   }
@@ -6487,7 +6658,7 @@ function frameBody(dt) {
     if (Net.mode === 'client') clientUpdate(dt);
     else if (!paused && state !== 'win' && !(rotateBlocked && Net.mode === 'solo') && !(shopUI && Net.mode === 'solo')) update(dt);
     if (Net.mode === 'host') hostSend(dt);
-    if (state === 'play') updatePets(dt);
+    if (state === 'play') { updatePets(dt); updateAmbience(dt); }
     if (shopUI) updateShopUI(realDt);
     if (shopScene()) { drawShopScene(realDt); drawIris(realDt); objT += dt; return; }
     ctx.fillStyle = '#0b1020'; ctx.fillRect(0, 0, VW, VH);
