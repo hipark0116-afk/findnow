@@ -333,6 +333,8 @@
   .tab.on { background: var(--red); color: var(--cream); }
   #storyText { font-weight: 700; }
   body.mini #storyBox::before, body.mini #storyBox::after { display: none; }
+  #storyBox { transition: opacity 0.3s; }
+  body.cine #storyBox { opacity: 0; pointer-events: none; }
   @media (max-height: 500px) {
     .paper::before { width: 34px; height: 26px; top: -11px; }
     #startBtn { font-size: 26px; }
@@ -449,10 +451,10 @@
 // =====================================================================
 
 // ---------- 기본 설정 ----------
-const W = 9000, H = 9000, CX = 4500, CY = 4500;   // 월드 크기 / 중앙(트리)
+const W = 13000, H = 13000, CX = 6500, CY = 6500; // 월드 크기 / 중앙(트리) — 넓은 맵
 const MAX_PLAYERS = 21;
 const BARRIER_R = 470;                              // 트리를 감싼 어둠의 장벽
-const ZONE_EDGE = [3400, 2300, 1300];               // 위험 구역 경계 (바깥 → 안쪽)
+const ZONE_EDGE = [4900, 3300, 1850];               // 위험 구역 경계 (바깥 → 안쪽)
 const ZONE_NAME = ['바깥 지역', '어스름 지역', '짙은 어둠', '트리의 심장'];
 const ZONE_HP = [1, 1.7, 2.6, 3.6];
 const ZONE_DMG = [1, 1.35, 1.8, 2.3];
@@ -463,7 +465,7 @@ const ZONE_TYPES = [
   ['fast', 'spitter', 'splitter', 'tank', 'ghost'],
   ['spitter', 'splitter', 'tank', 'ghost', 'ghost', 'fast'],
 ];
-const SNOW_CORE = 1700;                             // 트리 주변은 언제나 눈 덮인 크리스마스 마을
+const SNOW_CORE = 2400;                             // 트리 주변은 언제나 눈 덮인 크리스마스 마을
 
 // ---------- 지역 (6개, 트리를 중심으로 북쪽부터 시계 방향) ----------
 const BIOMES = [
@@ -792,7 +794,7 @@ const BOSS_DEFS = [
   { id: 'toad',     role: 'sub',      biome: 5, name: '거대 독두꺼비',    hp: 1600, r: 52, dmg: 18, who: 'toad', skill: 'turret' },
 ];
 BOSS_DEFS.forEach(d => {
-  const p = polar(d.biome, d.role === 'guardian' ? 2800 : 3850, d.role === 'guardian' ? 0 : 0.22);
+  const p = polar(d.biome, d.role === 'guardian' ? 3900 : 5700, d.role === 'guardian' ? 0 : 0.4);   // 수호자와 중간 보스는 멀리 떨어져 있어요
   d.x = p.x; d.y = p.y; d.dir = BIOMES[d.biome].icon + ' ' + BIOMES[d.biome].name;
 });
 const GUARDIANS = BOSS_DEFS.filter(d => d.role === 'guardian');
@@ -848,14 +850,14 @@ const decor = [], drifts = [], ornaments = [], terrain = [];
     for (const [t, w] of list) { if ((v -= w) < 0) return t; }
     return list[0][0];
   };
-  for (let i = 0; i < 2700; i++) {
+  for (let i = 0; i < 5600; i++) {
     const x = 60 + r() * (W - 120), y = 60 + r() * (H - 120);
     if (avoid(x, y)) continue;
     const b = biomeAt(x, y);
     decor.push({ t: choose(TABLE[b.id]), x, y, s: 0.7 + r() * 0.7, k: r(), b: b.id });
   }
   // 가장자리 숲
-  for (let i = 0; i < 420; i++) {
+  for (let i = 0; i < 620; i++) {
     const side = Math.floor(r() * 4), t = r() * W, o = r() * 140;
     const x = side < 2 ? t : side === 2 ? o : W - o;
     const y = side === 0 ? o : side === 1 ? H - o : t;
@@ -865,7 +867,7 @@ const decor = [], drifts = [], ornaments = [], terrain = [];
   const FLAT = { pond: 1, lava: 1, mud: 1, lily: 1, dune: 1 };
   for (const d of decor) { d.flat = !!FLAT[d.t]; if (d.t === 'lava' || d.t === 'mud') terrain.push(d); }
   decor.sort((a, b) => (a.flat ? -1e9 : a.y) - (b.flat ? -1e9 : b.y));
-  for (let i = 0; i < 3200; i++) {
+  for (let i = 0; i < 6600; i++) {
     const x = r() * W, y = r() * H;
     drifts.push({ x, y, rx: 30 + r() * 90, ry: 10 + r() * 22, c: biomeAt(x, y).drift });
   }
@@ -886,7 +888,7 @@ let local = null;              // 이 컴퓨터의 플레이어
 let enemies = [], bullets = [], ebullets = [], hazards = [], turrets = [], allies = [], zaps = [];
 let pickups = [], gifts = [], scrolls = [], particles = [], floats = [], toasts = [];
 let runTime = 0, gtime = 0, spawnT = 0, graceT = 0, eliteT = 0, giftT = 0, giftsOpened = 0;
-const GIFT_MAX = 260;            // 맵에 한 번에 놓여 있는 선물상자 최대 개수
+const GIFT_MAX = 380;            // 맵에 한 번에 놓여 있는 선물상자 최대 개수
 let teamShards = 0, finalStarted = false, finalBoss = null, endingT = 0, treeLight = 0;
 let shake = 0, hurtVignette = 0, barrierMsgT = 0, barrierBreak = 0;
 let autoAim = false;
@@ -1048,9 +1050,9 @@ function makePlayer(id, lookIdx, name) {
   let sx = CX, sy = CY;
   for (let tries = 0; tries < 50; tries++) {
     const ang = Math.random() * Math.PI * 2;
-    sx = clamp(CX + Math.cos(ang) * 3950, 350, W - 350);
-    sy = clamp(CY + Math.sin(ang) * 3950, 350, H - 350);
-    if (BOSS_DEFS.every(d => dist(sx, sy, d.x, d.y) > 1100)) break;
+    sx = clamp(CX + Math.cos(ang) * 5600, 350, W - 350);
+    sy = clamp(CY + Math.sin(ang) * 5600, 350, H - 350);
+    if (BOSS_DEFS.every(d => dist(sx, sy, d.x, d.y) > 1700)) break;
   }
   const skills = {}, cd = {};
   for (const s of SKILL_ORDER) { skills[s] = s === 'dash'; cd[s] = 0; }
@@ -1575,7 +1577,24 @@ function drawAchPop() {
   c.restore();
 }
 
-// ---------- 보스 등장 연출 ----------
+// ---------- 보스 등장 연출 (보스마다 다른 테마 애니메이션) ----------
+const RT = () => performance.now() / 1000;          // 슬로모션과 상관없이 흐르는 진짜 시간
+const BOSS_FX = {
+  snowman:  { fx: 'frost',    c: '#9fd8ff', ep: '얼어붙은 숲의 파수꾼',       s: 'nova' },
+  reindeer: { fx: 'stampede', c: '#ff5a67', ep: '밤하늘을 달리는 그림자',     s: 'rudolph' },
+  witch:    { fx: 'magic',    c: '#c77dff', ep: '영원한 밤을 부르는 마녀',    s: 'zap' },
+  king:     { fx: 'quake',    c: '#8fd3ff', ep: '눈보라를 다스리는 왕',       s: 'bomb' },
+  golem:    { fx: 'lava',     c: '#ff7b3c', ep: '식지 않는 화산의 심장',      s: 'explode' },
+  phoenix:  { fx: 'flame',    c: '#ff5a2a', ep: '검은 불꽃의 날개',           s: 'burn' },
+  scorpion: { fx: 'sand',     c: '#e8b45a', ep: '모래폭풍의 지배자',          s: 'tornado' },
+  cactus:   { fx: 'thorn',    c: '#7fc65a', ep: '사막의 가시 거인',           s: 'bomb' },
+  flower:   { fx: 'petal',    c: '#ff8fc8', ep: '독꽃 정원의 여왕',           s: 'heal' },
+  monkey:   { fx: 'leaf',     c: '#c6e05a', ep: '정글의 장난꾸러기 왕',       s: 'rudolph' },
+  hydra:    { fx: 'water',    c: '#5ad0c0', ep: '늪 속 세 머리의 공포',       s: 'eshot' },
+  toad:     { fx: 'bubble',   c: '#a6e05a', ep: '독 웅덩이의 주인',           s: 'bomb' },
+  lord:     { fx: 'dark',     c: '#b04cff', ep: '모든 빛을 삼키는 자',        s: 'thunder' },
+};
+const INTRO_LEN = 3.6;
 function checkBossIntro() {
   if (!local) return;
   for (const e of enemies) {
@@ -1583,28 +1602,174 @@ function checkBossIntro() {
     bossSeen[e.id] = 1;
     const d = BOSS_DEFS.find(q => q.id === e.id);
     const role = e.id === 'lord' ? '최후의 결전 · 어둠의 군주' : d ? d.dir + (d.role === 'guardian' ? '의 수호자' : '의 중간 보스') : '보스';
-    bossBanner = { t0: gtime, name: e.name, role };
-    sfx('roar'); shake = Math.max(shake, 10);
+    const F = BOSS_FX[e.id] || BOSS_FX.lord;
+    bossBanner = { t0: RT(), e, name: e.name, role, F, slam: false };
+    sfx('roar'); shake = Math.max(shake, 8);
   }
+}
+// 연출 중 진행도 (0~1), 카메라가 보스 쪽으로 갔다가 돌아와요
+// 혼자 할 때는 연출 동안 화면 UI를 숨겨서 영화처럼 보여 줘요
+function cineOn() { return !!bossBanner && Net.mode === 'solo' && state === 'play' && introK() < INTRO_LEN - 0.35; }
+function introK() { return bossBanner ? RT() - bossBanner.t0 : 99; }
+function introSlowmo() { const k = introK(); return k < INTRO_LEN - 0.6 && Net.mode === 'solo' && state === 'play' ? 0.2 : 1; }
+function introCamPull() {
+  const k = introK();
+  if (k > INTRO_LEN || !bossBanner || !bossBanner.e) return 0;
+  return ss(k / 0.8) * (1 - ss((k - (INTRO_LEN - 0.9)) / 0.8)) * 0.85;
+}
+function introBolt(c, x0, y0, x1, y1, seed) {
+  c.beginPath(); c.moveTo(x0, y0);
+  for (let i = 1; i <= 8; i++) { const t = i / 8; c.lineTo(lerp(x0, x1, t) + (i < 8 ? Math.sin(seed * 13 + i * 7.3) * 40 : 0), lerp(y0, y1, t)); }
+  c.stroke();
+}
+function introTheme(c, F, k, a, bx, by) {
+  const t = k, fx = F.fx, col = F.c;
+  c.save(); c.globalAlpha = a;
+  if (fx === 'frost') {
+    c.strokeStyle = '#ffffff'; c.lineWidth = 2;
+    for (let i = 0; i < 70; i++) {
+      const ang = i * 2.4 + t * (1 + (i % 3) * 0.4), r = 60 + (i * 53 % 380) + t * 50;
+      const x = bx + Math.cos(ang) * r, y = by + Math.sin(ang) * r * 0.7, sz = 4 + i % 5;
+      c.beginPath(); for (let j = 0; j < 3; j++) { const q = j * Math.PI / 3 + t; c.moveTo(x - Math.cos(q) * sz, y - Math.sin(q) * sz); c.lineTo(x + Math.cos(q) * sz, y + Math.sin(q) * sz); } c.stroke();
+    }
+    c.strokeStyle = 'rgba(200,240,255,0.85)'; c.lineWidth = 3;
+    const g = ss(t / 1.2) * 260;
+    for (const [cx, cy, sx, sy] of [[0, 0, 1, 1], [VW, 0, -1, 1], [0, VH, 1, -1], [VW, VH, -1, -1]]) {
+      for (let i = 0; i < 6; i++) { const ang = (i / 5) * Math.PI / 2; const ex = cx + sx * Math.cos(ang) * g, ey = cy + sy * Math.sin(ang) * g; c.beginPath(); c.moveTo(cx, cy); c.lineTo(ex, ey); c.moveTo(lerp(cx, ex, 0.6), lerp(cy, ey, 0.6)); c.lineTo(lerp(cx, ex, 0.6) + sx * 22, lerp(cy, ey, 0.6) - sy * 18); c.stroke(); }
+    }
+  } else if (fx === 'stampede') {
+    for (let i = 0; i < 9; i++) {
+      const x = ((t * 1100 + i * 260) % (VW + 500)) - 250, y = VH * 0.42 + (i % 3) * 70 + Math.sin(t * 18 + i) * 6;
+      c.fillStyle = 'rgba(20,10,16,0.85)';
+      c.beginPath(); c.ellipse(x, y, 46, 20, 0, 0, Math.PI * 2); c.fill();
+      c.beginPath(); c.ellipse(x + 44, y - 18, 16, 12, -0.3, 0, Math.PI * 2); c.fill();
+      for (const lx of [-30, -14, 16, 30]) c.fillRect(x + lx, y + 10, 6, 26 + Math.sin(t * 20 + lx) * 6);
+      c.strokeStyle = 'rgba(20,10,16,0.85)'; c.lineWidth = 4; c.beginPath(); c.moveTo(x + 46, y - 28); c.lineTo(x + 40, y - 52); c.lineTo(x + 30, y - 60); c.moveTo(x + 41, y - 46); c.lineTo(x + 54, y - 58); c.stroke();
+      c.fillStyle = '#ff3b3b'; circle(c, x + 52, y - 20, 3); c.fill();
+    }
+  } else if (fx === 'magic') {
+    c.globalCompositeOperation = 'lighter'; c.strokeStyle = col; c.lineWidth = 3; c.shadowColor = col; c.shadowBlur = 18;
+    const R = 140 + ss(t / 0.8) * 120;
+    circle(c, bx, by, R); c.stroke(); circle(c, bx, by, R * 0.78); c.stroke();
+    c.beginPath(); for (let i = 0; i <= 6; i++) { const q = t * 0.9 + i * Math.PI * 2 / 3 * 2; c.lineTo(bx + Math.cos(q) * R * 0.78, by + Math.sin(q) * R * 0.78); } c.stroke();
+    c.beginPath(); for (let i = 0; i <= 6; i++) { const q = -t * 0.9 + Math.PI / 3 + i * Math.PI * 2 / 3 * 2; c.lineTo(bx + Math.cos(q) * R * 0.78, by + Math.sin(q) * R * 0.78); } c.stroke();
+    for (let i = 0; i < 24; i++) { const q = -t * 0.6 + i * Math.PI / 12; c.beginPath(); c.arc(bx + Math.cos(q) * R * 0.89, by + Math.sin(q) * R * 0.89, 5, 0, Math.PI * 1.4); c.stroke(); }
+    c.shadowBlur = 0;
+    for (let i = 0; i < 30; i++) { const x = (i * 211) % VW, y = VH - ((t * 120 + i * 97) % VH); drawStar(c, x, y, 5, 2, i % 2 ? col : '#ffffff'); }
+  } else if (fx === 'quake') {
+    c.strokeStyle = col; c.lineWidth = 6;
+    for (let i = 0; i < 4; i++) { const r = ((t * 420 + i * 160) % 640); c.globalAlpha = a * (1 - r / 640); c.beginPath(); c.ellipse(bx, by + 20, r, r * 0.45, 0, 0, Math.PI * 2); c.stroke(); }
+    c.globalAlpha = a; c.strokeStyle = '#2b3b55'; c.lineWidth = 4;
+    for (let i = 0; i < 10; i++) introBolt(c, bx, by + 20, bx + Math.cos(i * 0.63) * 420 * ss(t / 0.6), by + 20 + Math.sin(i * 0.63) * 200 * ss(t / 0.6), i);
+    c.fillStyle = '#e8f6ff'; for (let i = 0; i < 18; i++) { const x = (i * 137 + 40) % VW, y = ((t * 500 + i * 211) % (VH + 100)) - 50; c.fillRect(x, y, 12 + i % 4 * 4, 12 + i % 3 * 4); }
+  } else if (fx === 'lava') {
+    const lg = c.createLinearGradient(0, VH, 0, VH * 0.5); lg.addColorStop(0, 'rgba(255,90,20,0.55)'); lg.addColorStop(1, 'rgba(255,90,20,0)');
+    c.fillStyle = lg; c.fillRect(0, VH * 0.5, VW, VH * 0.5);
+    c.strokeStyle = '#ffb347'; c.lineWidth = 5; c.shadowColor = '#ff5a00'; c.shadowBlur = 16;
+    for (let i = 0; i < 7; i++) introBolt(c, (i + 0.5) * VW / 7, VH, (i + 0.5) * VW / 7 + Math.sin(i) * 80, VH - ss(t / 0.9) * VH * (0.35 + (i % 3) * 0.1), i + 3);
+    c.shadowBlur = 0; c.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 60; i++) { const x = (i * 173) % VW + Math.sin(t * 3 + i) * 20, y = VH - ((t * 260 + i * 89) % VH); c.fillStyle = i % 3 ? '#ff7b3c' : '#ffd166'; circle(c, x, y, 2 + i % 4); c.fill(); }
+  } else if (fx === 'flame') {
+    c.globalCompositeOperation = 'lighter';
+    for (const side of [-1, 1]) for (let i = 0; i < 40; i++) {
+      const q = -Math.PI / 2 + side * (0.25 + i / 40 * 1.6) * ss(t / 0.7), r = 80 + (i % 8) * 34;
+      const x = bx + Math.cos(q) * r * 1.6, y = by - 20 + Math.sin(q) * r * 0.9;
+      c.fillStyle = i % 2 ? '#ff5a2a' : '#ffb347'; c.globalAlpha = a * (0.5 + 0.5 * Math.sin(t * 12 + i)); circle(c, x, y, 10 + (i % 5) * 3); c.fill();
+    }
+    c.globalAlpha = a;
+    for (let i = 0; i < 40; i++) { const x = (i * 199) % VW, y = VH - ((t * 400 + i * 77) % VH); c.fillStyle = '#ffd166'; circle(c, x, y, 2); c.fill(); }
+  } else if (fx === 'sand') {
+    c.fillStyle = 'rgba(232,180,90,0.25)'; c.fillRect(0, 0, VW, VH);
+    c.strokeStyle = 'rgba(240,200,120,0.85)'; c.lineWidth = 3; c.beginPath();
+    for (let i = 0; i < 90; i++) { const x = ((t * 1600 + i * 233) % (VW + 300)) - 150, y = (i * 61) % VH; c.moveTo(x, y); c.lineTo(x - 60 - i % 5 * 20, y + 4); }
+    c.stroke();
+  } else if (fx === 'thorn') {
+    c.fillStyle = '#4f8a2e'; c.strokeStyle = '#2b3b1a'; c.lineWidth = 2;
+    for (let i = 0; i < 18; i++) {
+      const q = i * Math.PI * 2 / 18 + 0.1, L = 120 + ss((t - i * 0.02) / 0.5) * (180 + (i % 3) * 60);
+      const x1 = bx + Math.cos(q) * 40, y1 = by + Math.sin(q) * 30, x2 = bx + Math.cos(q) * L, y2 = by + Math.sin(q) * L * 0.75, nx = -Math.sin(q) * 12, ny = Math.cos(q) * 12;
+      c.beginPath(); c.moveTo(x1 + nx, y1 + ny); c.lineTo(x2, y2); c.lineTo(x1 - nx, y1 - ny); c.closePath(); c.fill(); c.stroke();
+    }
+  } else if (fx === 'petal' || fx === 'leaf') {
+    for (let i = 0; i < 60; i++) {
+      const x = ((i * 157) % VW) + Math.sin(t * 2 + i) * 60 + (fx === 'petal' ? t * 120 : 0), y = ((t * (fx === 'leaf' ? 220 : 140) + i * 53) % (VH + 60)) - 30;
+      c.save(); c.translate(x % VW, y); c.rotate(t * 3 + i);
+      c.fillStyle = fx === 'petal' ? (i % 3 ? '#ff8fc8' : '#ffd1e8') : (i % 2 ? '#6fae3a' : '#c6e05a');
+      c.beginPath(); c.ellipse(0, 0, fx === 'petal' ? 9 : 13, fx === 'petal' ? 5 : 6, 0, 0, Math.PI * 2); c.fill();
+      c.restore();
+    }
+    if (fx === 'leaf') {
+      c.strokeStyle = '#3d6b2a'; c.lineWidth = 6;
+      for (let i = 0; i < 8; i++) { const x = (i + 0.5) * VW / 8, L = ss(t / 0.8) * (120 + (i % 3) * 70); c.beginPath(); c.moveTo(x, 0); for (let y = 0; y <= L; y += 10) c.lineTo(x + Math.sin(y * 0.05 + i) * 10, y); c.stroke(); }
+    } else {
+      c.fillStyle = 'rgba(180,90,200,0.18)'; c.beginPath(); c.ellipse(bx, by, 300 * ss(t / 0.8), 140 * ss(t / 0.8), 0, 0, Math.PI * 2); c.fill();
+    }
+  } else if (fx === 'water') {
+    c.strokeStyle = col; c.lineWidth = 3;
+    for (let i = 0; i < 5; i++) { const r = ((t * 200 + i * 90) % 450); c.globalAlpha = a * (1 - r / 450); c.beginPath(); c.ellipse(bx, by + 30, r, r * 0.35, 0, 0, Math.PI * 2); c.stroke(); }
+    c.globalAlpha = a; c.strokeStyle = 'rgba(20,50,40,0.9)'; c.lineWidth = 22; c.lineCap = 'round';
+    for (const off of [-150, 0, 150]) {
+      const h = ss((t - 0.2 - Math.abs(off) / 600) / 0.7) * 260;
+      c.beginPath(); for (let y = 0; y <= h; y += 8) c.lineTo(bx + off + Math.sin(y * 0.03 + t * 4 + off) * 26, by + 60 - y); c.stroke();
+    }
+    c.fillStyle = '#ffef6b'; for (const off of [-150, 0, 150]) { const h = ss((t - 0.2 - Math.abs(off) / 600) / 0.7) * 260; if (h > 30) { circle(c, bx + off + Math.sin(h * 0.03 + t * 4 + off) * 26 + 6, by + 60 - h, 4); c.fill(); } }
+  } else if (fx === 'bubble') {
+    c.strokeStyle = col; c.lineWidth = 3;
+    for (let i = 0; i < 40; i++) { const x = (i * 181) % VW + Math.sin(t * 3 + i) * 14, y = VH - ((t * 230 + i * 71) % (VH + 40)), r = 6 + (i % 5) * 5; circle(c, x, y, r); c.stroke(); }
+    const bg = c.createLinearGradient(0, VH, 0, VH * 0.6); bg.addColorStop(0, 'rgba(120,180,60,0.4)'); bg.addColorStop(1, 'rgba(120,180,60,0)'); c.fillStyle = bg; c.fillRect(0, VH * 0.6, VW, VH * 0.4);
+  } else if (fx === 'dark') {
+    c.strokeStyle = '#e6c8ff'; c.lineWidth = 4; c.shadowColor = col; c.shadowBlur = 24;
+    const f = Math.floor(t * 4);
+    if (f % 2 === 0) for (let i = 0; i < 2; i++) { const x = ((f * 331 + i * 457) % VW); introBolt(c, x, 0, x + 60, VH * 0.7, f + i); }
+    c.shadowBlur = 0;
+    const eo = ss((t - 0.4) / 0.6);
+    c.fillStyle = 'rgba(255,40,80,' + (0.9 * eo) + ')'; c.shadowColor = '#ff2850'; c.shadowBlur = 30;
+    c.beginPath(); c.ellipse(VW / 2 - 120, VH * 0.2, 46, 14, 0.15, 0, Math.PI * 2); c.ellipse(VW / 2 + 120, VH * 0.2, 46, 14, -0.15, 0, Math.PI * 2); c.fill();
+  }
+  c.restore();
 }
 function drawBossBanner() {
   if (!bossBanner) return;
-  const k = gtime - bossBanner.t0, dur = 2.8;
-  if (k > dur) { bossBanner = null; return; }
-  const a = clamp(Math.min(k / 0.35, (dur - k) / 0.4), 0, 1), c = ctx, s = hudScale();
+  const k = introK(), B = bossBanner, F = B.F;
+  if (k > INTRO_LEN) { bossBanner = null; return; }
+  const c = ctx, s = hudScale();
+  const a = clamp(Math.min(k / 0.35, (INTRO_LEN - k) / 0.5), 0, 1);
+  const bx = B.e ? B.e.x - cam.x : VW / 2, by = B.e ? B.e.y - (B.e.z || 0) - cam.y : VH / 2;
+  // 1) 어둠 + 보스에게 비추는 조명
   c.save();
-  const bh = 54 * s * a;
-  c.fillStyle = 'rgba(25,12,6,0.88)'; c.fillRect(0, 0, VW, bh); c.fillRect(0, VH - bh, VW, bh);
-  c.scale(s, s);
-  const W2 = VW / s, cx = W2 / 2 + (1 - Math.min(1, k / 0.35)) * -120, cy = (VH / s) * 0.34;
-  c.globalAlpha = a;
-  const w = 520, h = 96;
-  paperPanel(c, cx - w / 2, cy - h / 2, w, h, 16, '#3a241c');
-  garland(c, cx - w / 2 + 20, cy - h / 2, w - 40);
-  c.textAlign = 'center';
-  c.font = FONT(19); c.fillStyle = '#ffd166'; c.fillText('⚔ ' + bossBanner.role + ' ⚔', cx, cy - 12);
-  inkText(c, bossBanner.name, cx, cy + 30, PEN(46), 'center', UI.cream, '#3b2416');
+  const sg = c.createRadialGradient(bx, by, 60, bx, by, Math.max(VW, VH) * 0.8);
+  sg.addColorStop(0, 'rgba(10,6,16,0)'); sg.addColorStop(0.3, 'rgba(10,6,16,' + 0.5 * a + ')'); sg.addColorStop(1, 'rgba(10,6,16,' + 0.9 * a + ')');
+  c.fillStyle = sg; c.fillRect(0, 0, VW, VH);
+  const tg = c.createRadialGradient(bx, by, 10, bx, by, 260);
+  tg.addColorStop(0, F.c + '55'); tg.addColorStop(1, F.c + '00');
+  c.globalCompositeOperation = 'lighter'; c.globalAlpha = a; c.fillStyle = tg; circle(c, bx, by, 260); c.fill();
   c.restore();
+  // 2) 테마 애니메이션
+  introTheme(c, F, k, a, bx, by);
+  // 3) 위아래 검은 띠
+  const bh = 64 * s * ss(Math.min(k / 0.4, (INTRO_LEN - k) / 0.4));
+  c.fillStyle = '#120a08'; c.fillRect(0, 0, VW, bh); c.fillRect(0, VH - bh, VW, bh);
+  // 4) 이름이 쾅! 하고 찍혀요
+  const ks = k - 0.85;
+  if (ks > 0 && !B.slam) { B.slam = true; shake = Math.max(shake, 16); sfx(F.s); flashScreen('#ffffff', 0.25); }
+  if (ks > 0) {
+    c.save(); c.scale(s, s);
+    const W2 = VW / s, H2 = VH / s, cx = W2 / 2, cy = H2 * 0.72;
+    const pop = ks < 0.25 ? 2.2 - 1.2 * ss(ks / 0.25) : 1 + Math.max(0, 0.06 - (ks - 0.25) * 0.2);
+    c.globalAlpha = a;
+    const lw = Math.min(W2 * 0.42, 360) * ss(ks / 0.5);
+    c.strokeStyle = F.c; c.lineWidth = 2;
+    c.beginPath(); c.moveTo(cx - 40 - lw, cy - 52); c.lineTo(cx - 40, cy - 52); c.moveTo(cx + 40, cy - 52); c.lineTo(cx + 40 + lw, cy - 52); c.stroke();
+    c.textAlign = 'center';
+    inkText(c, B.role, cx, cy - 46, FONT(20), 'center', F.c, '#1a0f0a');
+    c.save(); c.translate(cx, cy + 10); c.scale(pop, pop);
+    c.shadowColor = F.c; c.shadowBlur = 26;
+    inkText(c, B.name, 0, 0, PEN(72), 'center', '#fffaf0', '#1a0f0a');
+    c.restore();
+    const ep = F.ep, n = Math.floor(clamp((ks - 0.3) / 0.9, 0, 1) * ep.length);
+    if (n > 0) inkText(c, '— ' + ep.slice(0, n) + ' —', cx, cy + 52, FONT(22), 'center', '#ffe9c2', '#1a0f0a');
+    c.restore();
+  }
 }
 
 function gainXp(p, n) {
@@ -1676,6 +1841,10 @@ function damageEnemy(e, dmg, src) {
   // 치명타! (기본 10% + 카드 + 피버 중 +10%)
   const crit = !!(src && src.level) && Math.random() < 0.1 + (src.crit || 0) + (src.feverT > 0 ? 0.1 : 0);
   if (crit) dmg *= 2;
+  if (e.kind === 'boss' && !e.awake && bossBlocked(e)) {
+    if (Math.random() < 0.08) addFloat({ x: e.x, y: e.y - e.r - 30, text: '💤 다른 보스와 싸우는 중이라 잠들어 있어요', color: '#c9b6ff', t: 0, life: 1, size: 14 });
+    return;
+  }
   e.hp -= dmg; e.flash = 0.08;
   if (e.kind === 'boss' && !e.awake) wakeBoss(e);
   const big = dmg >= 40;
@@ -1724,8 +1893,13 @@ function killEnemy(e, src) {
   }
   if (e.kind === 'boss') onBossDefeated(e);
 }
+// 근처에서 다른 보스가 이미 싸우고 있으면 깨어나지 않아요 (보스 둘이 한꺼번에 나오지 않게)
+function bossBlocked(b) {
+  if (b.id === 'lord') return false;
+  return enemies.some(o => o !== b && o.kind === 'boss' && o.awake && !o.dead && o.id !== 'lord' && dist(o.x, o.y, b.x, b.y) < 4000);
+}
 function wakeBoss(b) {
-  if (b.awake || b.dead) return;
+  if (b.awake || b.dead || bossBlocked(b)) return;
   b.awake = true;
   if (!b.intro) {
     b.intro = true;
@@ -2433,11 +2607,11 @@ function spawnGift(near, fresh) {
   let x, y;
   for (let k = 0; k < 8; k++) {
     if (near) { const a = Math.random() * Math.PI * 2, d = rand(450, 1100); x = near.x + Math.cos(a) * d; y = near.y + Math.sin(a) * d; }
-    else { const a = Math.random() * Math.PI * 2, d = rand(650, 4300); x = CX + Math.cos(a) * d; y = CY + Math.sin(a) * d; }
+    else { const a = Math.random() * Math.PI * 2, d = rand(650, 6200); x = CX + Math.cos(a) * d; y = CY + Math.sin(a) * d; }
     x = clamp(x, 120, W - 120); y = clamp(y, 120, H - 120);
     if (dist(x, y, CX, CY) > 620) break;
   }
-  const g = { x, y, opened: false, rich: dist(x, y, CX, CY) < 2300 || Math.random() < 0.15 };
+  const g = { x, y, opened: false, rich: dist(x, y, CX, CY) < 3300 || Math.random() < 0.15 };
   gifts.push(g);
   if (fresh && local && dist(x, y, local.x, local.y) < 900) burst(x, y, '#ffd166', 14, 140);
   return g;
@@ -3017,8 +3191,10 @@ function updateCamera(dt) {
   // 카메라
   if (local) {
     const ending = state === 'ending';
-    const tx = (ending ? CX : local.x) - VW / 2, ty = (ending ? CY - 120 - 200 * ss((endingT - 3) / 3) : local.y) - VH / 2 + 60;
-    const k = Math.min(1, dt * (ending ? 1.5 : 8));
+    let tx = (ending ? CX : local.x) - VW / 2, ty = (ending ? CY - 120 - 200 * ss((endingT - 3) / 3) : local.y) - VH / 2 + 60;
+    const pull = ending ? 0 : introCamPull();             // 보스 등장 연출: 카메라가 보스 쪽으로
+    if (pull > 0) { const e = bossBanner.e; tx = lerp(tx, e.x - VW / 2, pull); ty = lerp(ty, e.y - (e.z || 0) - VH / 2, pull); }
+    const k = Math.min(1, dt * (ending ? 1.5 : pull > 0 ? 4 : 8));
     cam.x = lerp(cam.x, tx, k); cam.y = lerp(cam.y, ty, k);
   }
 }
@@ -4108,6 +4284,8 @@ function autoStoryLayout() {
 }
 // 휴대폰 게임 중 접힌 이야기 박스는 아래쪽 작은 띠로 (게임 화면을 가리지 않게)
 function updateMiniStory() {
+  const cine = cineOn();
+  if (document.body.classList.contains('cine') !== cine) document.body.classList.toggle('cine', cine);
   const want = touchUI.enabled && state === 'play' && el('storyBox').classList.contains('collapsed');
   if (document.body.classList.contains('mini') !== want) {
     document.body.classList.toggle('mini', want);
@@ -5341,7 +5519,7 @@ function drawHUDInner() {
   }
   c.fillStyle = BIOMES[0].map; circle(c, mcx, mcy, SNOW_CORE * sc); c.fill();
   c.font = '12px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.globalAlpha = 0.55;
-  for (let i = 0; i < BIOMES.length; i++) { const q = polar(i, 3300, -0.42); c.fillText(BIOMES[i].icon, mx + q.x * sc, my + q.y * sc); }
+  for (let i = 0; i < BIOMES.length; i++) { const q = polar(i, 4800, -0.42); c.fillText(BIOMES[i].icon, mx + q.x * sc, my + q.y * sc); }
   c.globalAlpha = 1;
   const zc = ['rgba(90,50,90,0.12)', 'rgba(70,30,70,0.18)', 'rgba(50,20,50,0.26)'];
   for (let i = 0; i < 3; i++) { c.fillStyle = zc[i]; circle(c, mx + CX * sc, my + CY * sc, ZONE_EDGE[i] * sc); c.fill(); }
@@ -5755,7 +5933,8 @@ function frame(now) {
     perfSlowT = perfAvg > 0.026 ? perfSlowT + dt : 0;
     if (perfSlowT > 3) { fxLow = true; toast('⚙ 부드럽게 움직이도록 이펙트를 조금 줄였어요', '#9fd3ff'); }
   }
-  if (hitStopT > 0) { hitStopT -= dt; dt *= 0.08; }    // 큰 한 방에 잠깐 멈칫!
+  if (hitStopT > 0) { hitStopT -= dt; dt *= 0.08; }
+  if (bossBanner) dt *= introSlowmo();                  // 보스 등장 순간은 슬로모션 (혼자 할 때)    // 큰 한 방에 잠깐 멈칫!
   try { frameBody(dt); } catch (err) { console.error(err); }   // 오류가 나도 게임이 멈추지 않게
   updateStory(dt);
   requestAnimationFrame(frame);
@@ -5780,7 +5959,7 @@ function frameBody(dt) {
     if (screenFlashA > 0) { ctx.globalAlpha = Math.min(1, screenFlashA); ctx.fillStyle = screenFlashColor; ctx.fillRect(0, 0, VW, VH); ctx.globalAlpha = 1; }
     if (worldEv && state === 'play') drawWeatherFx();
     if (state === 'ending' || state === 'win') drawCinematic();
-    else if (local) { checkBossIntro(); drawHUD(); drawBossBanner(); }
+    else if (local) { checkBossIntro(); if (!cineOn()) drawHUD(); drawBossBanner(); }
     if (state === 'play' && !paused) updateSleighs(dt, Net.mode !== 'client');
     if ((state === 'play' || state === 'win') && local) checkAchievements(dt);
     drawAchPop();
