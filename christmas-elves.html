@@ -424,7 +424,8 @@
         <div><b>스킬</b> <kbd>Q</kbd> 서리 폭발 · <kbd>E</kbd> 선물 포탑 · <kbd>R</kbd> 별똥별 비</div>
         <div><b>스킬</b> <kbd>F</kbd> 번개 사슬 · <kbd>G</kbd> 눈보라 회오리</div>
         <div><b>스킬</b> <kbd>C</kbd> 치유의 종 · <kbd>V</kbd> 루돌프 돌진</div>
-        <div><b>💀 수호자 + ⚙ 코어</b> 수호자를 쓰러뜨리면 옆 공장 코어의 방어막이 꺼져요 → 코어를 부숴 ⭐별조각 (6개 필요)</div>
+        <div><b>💀 수호자 + ⚙ 코어</b> 수호자를 쓰러뜨리면 옆 공장 코어의 방어막이 꺼져요 → 경비대를 물리치고 코어를 부숴 ⭐별조각 (6개 필요)</div>
+        <div><b>💢 광폭화</b> 보스 체력이 25% 아래면 더 빠르고 강해져요 · 엘프가 강해질수록 보스도 강해져요</div>
         <div><b>👹 중간 보스</b> 지역마다 1마리 → ✦ 새 스킬 두루마리</div>
         <div><b>🧊 빙하</b> 미끄러워요 · <b>🌋 화산</b> 용암 뜨거움</div>
         <div><b>🐸 습지</b> 진흙에서 느려짐 · <b>🌴 정글</b> 독구름 조심</div>
@@ -799,17 +800,21 @@ const ETYPES = {
 
 // ---------- 난이도 ----------
 const DIFFS = {
-  normal: { id: 'normal', name: '보통',   icon: '🙂', hp: 1.0,  dmg: 1.0, boss: 1.8, bossDmg: 1.3, lord: 30000, spd: 1.0,  horde: 200, elite: 60, heal: 1.0,  iframe: 0.35, respawn: 0 },
-  hard:   { id: 'hard',   name: '어려움', icon: '😠', hp: 1.35, dmg: 1.3, boss: 2.6, bossDmg: 1.7, lord: 45000, spd: 1.12, horde: 150, elite: 50, heal: 0.75, iframe: 0.28, respawn: 1 },
-  hell:   { id: 'hell',   name: '지옥',   icon: '😈', hp: 1.8,  dmg: 1.7, boss: 3.6, bossDmg: 2.2, lord: 70000, spd: 1.25, horde: 110, elite: 40, heal: 0.55, iframe: 0.22, respawn: 3 },
+  // card: 선물 카드 효과 배율 · lvl: 레벨업 능력치 배율 · scaleLv: 플레이어 레벨이 오를수록 보스·코어·적이 강해지는 정도 · darkT: 어둠이 짙어지는 간격(초)
+  normal: { id: 'normal', name: '보통',   icon: '🙂', hp: 1.0,  dmg: 1.0, boss: 2.6, bossDmg: 1.5, lord: 45000,  spd: 1.0,  horde: 200, elite: 60, heal: 1.0,  iframe: 0.35, respawn: 0,
+            card: 1, lvl: 1, scaleLv: 0.04, darkT: 180 },
+  hard:   { id: 'hard',   name: '어려움', icon: '😠', hp: 1.4,  dmg: 1.35, boss: 4.2, bossDmg: 2.3, lord: 80000, spd: 1.14, horde: 140, elite: 45, heal: 0.7,  iframe: 0.26, respawn: 2,
+            card: 0.8, lvl: 0.8, scaleLv: 0.06, darkT: 150 },
+  hell:   { id: 'hell',   name: '지옥',   icon: '😈', hp: 2.0,  dmg: 1.9, boss: 7.0, bossDmg: 3.6, lord: 160000, spd: 1.35, horde: 95,  elite: 32, heal: 0.4,  iframe: 0.18, respawn: 5,
+            card: 0.6, lvl: 0.6, scaleLv: 0.09, darkT: 110 },
   // 🌙 힐링 모드: 천천히, 적도 약하고 적게, 화면 효과도 부드럽게 (눈이 편해요)
   heal:   { id: 'heal',   name: '힐링',   icon: '🌙', hp: 0.5,  dmg: 0.4, boss: 0.9, bossDmg: 0.6, lord: 12000, spd: 0.8,  horde: 1e9, elite: 170, heal: 1.6,  iframe: 0.6,  respawn: -2,
-            fx: 0.3, pace: 0.85, cap: 0.4, ev: 0.8, noDark: true, calm: true },
+            fx: 0.3, pace: 0.85, cap: 0.4, ev: 0.8, noDark: true, calm: true, card: 1.3, lvl: 1.2, scaleLv: 0 },
   // ⚡ 스릴 모드: 빠르고 정신없이! 적이 잔뜩, 이벤트도 자주
-  thrill: { id: 'thrill', name: '스릴',   icon: '⚡', hp: 1.2,  dmg: 1.35, boss: 2.2, bossDmg: 1.6, lord: 40000, spd: 1.2, horde: 75,  elite: 28, heal: 0.85, iframe: 0.3,  respawn: 0,
-            fx: 1.15, pace: 1.12, cap: 1.6, ev: 0.45 },
+  thrill: { id: 'thrill', name: '스릴',   icon: '⚡', hp: 1.3,  dmg: 1.5, boss: 4.5, bossDmg: 2.6, lord: 90000, spd: 1.25, horde: 70,  elite: 26, heal: 0.75, iframe: 0.26, respawn: 1,
+            fx: 1.15, pace: 1.12, cap: 1.6, ev: 0.45, card: 0.75, lvl: 0.8, scaleLv: 0.07, darkT: 120 },
 };
-for (const d of Object.values(DIFFS)) for (const [k, v] of Object.entries({ fx: 1, pace: 1, cap: 1, ev: 1, noDark: false, calm: false })) if (d[k] === undefined) d[k] = v;
+for (const d of Object.values(DIFFS)) for (const [k, v] of Object.entries({ fx: 1, pace: 1, cap: 1, ev: 1, noDark: false, calm: false, card: 1, lvl: 1, scaleLv: 0.04, darkT: 180 })) if (d[k] === undefined) d[k] = v;
 let DIFF = DIFFS.hard;
 let darkLevel = 0, darkT = 0, hordeT = 0;     // 시간이 지날수록 짙어지는 어둠 / 어둠의 습격
 
@@ -1419,7 +1424,7 @@ function hurtPlayer(p, dmg) {
   if (Net.mode === 'client') return;
   if (p.dead || p.invuln > 0 || p.dashT > 0 || state !== 'play' || p.inShop) return;
   if (p.shieldT > 0) { if (Math.random() < 0.3) addFloat({ x: p.x, y: p.y - 34, text: '🛡 막음!', color: '#9fd3ff', t: 0, life: 0.6, size: 15 }); return; }
-  dmg *= (p.armor || 1) * (1 - petB(p, 'armor'));
+  dmg *= Math.max(0.6, (p.armor || 1) * (1 - petB(p, 'armor')));   // 피해 감소는 최대 40%까지
   p.hp -= dmg; p.invuln = DIFF.iframe;
   addFloat({ x: p.x, y: p.y - 30, text: '-' + Math.round(dmg), color: '#ff5a67', t: 0, life: 0.8, size: 18 });
   sfx('hurt', p.x, p.y); burst(p.x, p.y - 6, '#ff5a67', 8, 160);
@@ -1435,19 +1440,22 @@ function hurtPlayer(p, dmg) {
 // =====================================================================
 //  더 재미있게! 콤보·피버 / 치명타 / 레벨업 선물 카드 / 세계 이벤트 / 업적
 // =====================================================================
+// 선물 카드: 기본값을 낮추고, 어려운 모드일수록 더 약해져요 (DIFF.card)
+const CK = () => DIFF.card, PCT = v => Math.round(v * 100) + '%';
 const UPGRADES = [
-  { id: 'atk',   icon: '⚔️', name: '날카로운 지팡이', desc: '공격력 +15%',          fn: p => { p.dmgMul += 0.15; } },
-  { id: 'rate',  icon: '⚡', name: '빠른 손놀림',     desc: '공격 속도 +12%',       fn: p => { p.rateMul *= 0.88; } },
-  { id: 'spd',   icon: '👢', name: '썰매 부츠',       desc: '이동 속도 +8%',        fn: p => { p.speed *= 1.08; } },
-  { id: 'hp',    icon: '💖', name: '따뜻한 스웨터',   desc: '최대 체력 +30',        fn: p => { p.maxHp += 30; p.hp += 30; } },
-  { id: 'crit',  icon: '💥', name: '반짝 행운',       desc: '치명타 확률 +7%',      fn: p => { p.crit = (p.crit || 0) + 0.07; } },
-  { id: 'vamp',  icon: '🍪', name: '쿠키 냠냠',       desc: '물리칠 때마다 체력 +2', fn: p => { p.vamp = (p.vamp || 0) + 2; } },
-  { id: 'mag',   icon: '🧲', name: '별빛 자석',       desc: '빛 조각 끌어오기 +60%', fn: p => { p.magnet = (p.magnet || 1) + 0.6; } },
-  { id: 'cd',    icon: '⏳', name: '모래시계 장식',   desc: '스킬 쿨타임 -10%',     fn: p => { p.cdMul = (p.cdMul || 1) * 0.9; p.dashCdMul *= 0.9; } },
-  { id: 'fever', icon: '🔥', name: '축제 기분',       desc: '피버 시간 +3초',       fn: p => { p.feverAdd = (p.feverAdd || 0) + 3; } },
-  { id: 'regen', icon: '🌿', name: '호랑가시 부적',   desc: '체력 자연 회복 +1/초', fn: p => { p.regen = (p.regen || 0) + 1; } },
-  { id: 'armor', icon: '🛡', name: '두꺼운 털모자',   desc: '받는 피해 -8%',        fn: p => { p.armor = (p.armor || 1) * 0.92; } },
+  { id: 'atk',   icon: '⚔️', name: '날카로운 지팡이', desc: () => '공격력 +' + PCT(0.08 * CK()),            fn: p => { p.dmgMul += 0.08 * CK(); } },
+  { id: 'rate',  icon: '⚡', name: '빠른 손놀림',     desc: () => '공격 속도 +' + PCT(0.06 * CK()),          fn: p => { p.rateMul *= 1 - 0.06 * CK(); } },
+  { id: 'spd',   icon: '👢', name: '썰매 부츠',       desc: () => '이동 속도 +' + PCT(0.05 * CK()),          fn: p => { p.speed *= 1 + 0.05 * CK(); } },
+  { id: 'hp',    icon: '💖', name: '따뜻한 스웨터',   desc: () => '최대 체력 +' + Math.round(18 * CK()),      fn: p => { const v = Math.round(18 * CK()); p.maxHp += v; p.hp += v; } },
+  { id: 'crit',  icon: '💥', name: '반짝 행운',       desc: () => '치명타 확률 +' + PCT(0.04 * CK()),        fn: p => { p.crit = Math.min(0.4, (p.crit || 0) + 0.04 * CK()); } },
+  { id: 'vamp',  icon: '🍪', name: '쿠키 냠냠',       desc: () => '물리칠 때마다 체력 +' + (CK() >= 1 ? 1 : 0.5), fn: p => { p.vamp = (p.vamp || 0) + (CK() >= 1 ? 1 : 0.5); } },
+  { id: 'mag',   icon: '🧲', name: '별빛 자석',       desc: () => '빛 조각 끌어오기 +' + PCT(0.4 * CK()),    fn: p => { p.magnet = (p.magnet || 1) + 0.4 * CK(); } },
+  { id: 'cd',    icon: '⏳', name: '모래시계 장식',   desc: () => '스킬 쿨타임 -' + PCT(0.05 * CK()),        fn: p => { const k = 1 - 0.05 * CK(); p.cdMul = Math.max(0.6, (p.cdMul || 1) * k); p.dashCdMul = Math.max(0.5, p.dashCdMul * k); } },
+  { id: 'fever', icon: '🔥', name: '축제 기분',       desc: () => '피버 시간 +' + Math.round(2 * CK() * 10) / 10 + '초', fn: p => { p.feverAdd = Math.min(8, (p.feverAdd || 0) + 2 * CK()); } },
+  { id: 'regen', icon: '🌿', name: '호랑가시 부적',   desc: () => '체력 자연 회복 +' + Math.round(0.5 * CK() * 10) / 10 + '/초', fn: p => { p.regen = (p.regen || 0) + 0.5 * CK(); } },
+  { id: 'armor', icon: '🛡', name: '두꺼운 털모자',   desc: () => '받는 피해 -' + PCT(0.04 * CK()) + ' (최대 35%)', fn: p => { p.armor = Math.max(0.65, (p.armor || 1) * (1 - 0.04 * CK())); } },
 ];
+const upDesc = u => typeof u.desc === 'function' ? u.desc() : u.desc;
 const UPG = Object.fromEntries(UPGRADES.map(u => [u.id, u]));
 function rollOffers() {
   const ids = UPGRADES.map(u => u.id), out = [];
@@ -1463,7 +1471,7 @@ function pickUpgrade(p, i) {
   p.picks = Math.max(0, (p.picks || 1) - 1);
   p.offers = p.picks > 0 ? rollOffers() : null;
   sparkle(p.x, p.y - 20, '#ffd166', 14, 160); sfx('scroll', p.x, p.y);
-  notify(p, 'T', u.icon + ' ' + u.name + ' — ' + u.desc, '#ffd166');
+  notify(p, 'T', u.icon + ' ' + u.name + ' — ' + upDesc(u), '#ffd166');
 }
 function choosePerk(i) {
   if (!local || !local.offers || state !== 'play' || paused) return;
@@ -2190,17 +2198,37 @@ const CORE_STYLE = {
 };
 function makeCore(d) {
   const S = CORE_STYLE[d.id], scale = 1 + 0.35 * (players.length - 1);
-  const hp = Math.round(d.hp * 0.7 * DIFF.boss * scale);
+  const hp = Math.round(d.hp * 1.6 * DIFF.boss * scale);
   return {
-    kind: 'core', type: 'core:' + d.id, id: d.id, name: S.name, x: d.cx, y: d.cy, r: 46, hp, maxHp: hp, dmg: d.dmg * 0.6 * DIFF.bossDmg,
+    kind: 'core', type: 'core:' + d.id, id: d.id, name: S.name, x: d.cx, y: d.cy, r: 46, hp, maxHp: hp, dmg: d.dmg * 0.85 * DIFF.bossDmg,
     xp: 140, color: S.c, eye: S.c2, zone: zoneAt(d.cx, d.cy), seed: Math.random() * 10, hitCd: 0, flash: 0, slowT: 0, alpha: 1,
     atk: 2, guardT: 6, spin: 0, shielded: true, uid: ++uidSeq,
   };
 }
+function coreGuards(e) { return enemies.filter(q => q.guardOf === e.id && !q.dead); }
+function spawnGuards(e, n, elites) {
+  const d = BOSS_DEFS.find(q => q.id === e.id), S = CORE_STYLE[e.id];
+  for (let i = 0; i < n; i++) {
+    const a = i / n * Math.PI * 2 + Math.random() * 0.4, g = makeEnemy(pick(BIOMES[d.biome].mobs), e.x + Math.cos(a) * 150, e.y + 60 + Math.sin(a) * 80, e.zone, i < elites ? 'elite' : 'mob');
+    g.summoned = true; g.guardOf = e.id; g.hp *= 1.5; g.maxHp = g.hp; enemies.push(g); burst(g.x, g.y, S.c, 12, 150);
+  }
+}
 function updateCore(e, dt) {                            // 방장만
+  const was = e.shieldPrev !== false;
   e.shielded = !bossDefeated[e.id];
+  e.shieldPrev = e.shielded;
   const tgt = nearestPlayer(e.x, e.y, 760);
-  if (!tgt) return;
+  if (!tgt) { e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.02 * dt); return; }   // 아무도 없으면 코어가 다시 회복돼요
+  scaleToParty(e, 1.2, 0.5);
+  const hard = DIFF.id === 'hell' || DIFF.id === 'thrill' ? 2 : DIFF.id === 'hard' ? 1 : 0;
+  if (!e.squad) {                                       // 처음 다가오면 경비대가 별을 지키러 나와요
+    e.squad = true; spawnGuards(e, 6 + hard * 2, hard);
+    toastAll('⚙ ' + e.name + '의 경비대가 별조각을 지키고 있어요!', CORE_STYLE[e.id].c);
+  }
+  if (was && !e.shielded) {                             // 방어막이 꺼지면 코어 방어 프로토콜!
+    spawnGuards(e, 8 + hard * 2, 1 + hard);
+    toastAll('⚠ 코어 방어 프로토콜! 경비대가 몰려와요', '#ff5a67'); sfx('roar', e.x, e.y); shake = Math.max(shake, 10);
+  }
   const S = CORE_STYLE[e.id], a2t = Math.atan2(tgt.y - e.y, tgt.x - e.x), dm = e.dmg;
   e.atk -= dt; e.guardT -= dt;
   if (e.spiralT > 0) {                                  // 마법 수정구: 소용돌이 탄막
@@ -2229,16 +2257,8 @@ function updateCore(e, dt) {                            // 방장만
   }
   // 공장에서 경비병이 나와요
   if (e.guardT <= 0) {
-    e.guardT = 13;
-    const guards = enemies.filter(q => q.guardOf === e.id && !q.dead).length;
-    if (guards < 4) {
-      const d = BOSS_DEFS.find(q => q.id === e.id);
-      for (let i = 0; i < 2; i++) {
-        const a = Math.random() * Math.PI * 2, g = makeEnemy(pick(BIOMES[d.biome].mobs), e.x + Math.cos(a) * 120, e.y + 60 + Math.sin(a) * 60, e.zone);
-        g.summoned = true; g.guardOf = e.id; enemies.push(g); burst(g.x, g.y, S.c, 12, 150);
-      }
-      sfx('alert', e.x, e.y);
-    }
+    e.guardT = DIFF.id === 'heal' ? 14 : 8 - hard;
+    if (coreGuards(e).length < 8 + hard * 2) { spawnGuards(e, 3, hard > 1 ? 1 : 0); sfx('alert', e.x, e.y); }
   }
 }
 function onCoreDestroyed(e) {
@@ -2319,6 +2339,16 @@ function drawCoreRaw(e) {
   }
 }
 const drawCore = inked(drawCoreRaw, 2);
+function drawGuardLinks(e) {                          // 경비대 ↔ 코어 보호 연결선
+  const c = ctx, col = CORE_STYLE[e.id] ? CORE_STYLE[e.id].c : '#ffb84d';
+  c.save(); c.strokeStyle = col; c.globalAlpha = 0.45; c.lineWidth = 2; c.setLineDash([8, 8]); c.lineDashOffset = -gtime * 40;
+  for (const q of enemies) if (q.guardOf && !q.dead && (q.guardOf === e.id || q.guardOf === true) && dist(q.x, q.y, e.x, e.y) < 750) { c.beginPath(); c.moveTo(e.x, e.y - 40); c.lineTo(q.x, q.y); c.stroke(); }
+  c.restore();
+}
+function drawRage(b) {                                  // 광폭화한 보스의 붉은 기운
+  const c = ctx; c.save(); c.globalCompositeOperation = 'lighter'; c.globalAlpha = 0.45 + 0.2 * Math.sin(gtime * 12);
+  const R = b.r * 2.6; c.drawImage(glowSprite('#ff3b3b'), b.x - R, b.y - (b.z || 0) - R, R * 2, R * 2); c.restore();
+}
 function drawCoreUI(e) {
   hpBar(e.x, e.y - 130, 120, e.hp / e.maxHp, CORE_STYLE[e.id] ? CORE_STYLE[e.id].c : '#ff5a67');
   ctx.save(); ctx.textAlign = 'center'; ctx.font = FONT(15); ctx.fillStyle = '#fffaf0'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(30,20,40,0.8)';
@@ -2581,7 +2611,7 @@ function gainXp(p, n) {
   p.xp += n;
   while (p.xp >= p.xpNext) {
     p.xp -= p.xpNext; p.level++; p.xpNext = Math.round(12 + p.level * 9);
-    p.maxHp += 8; p.dmgMul += 0.07; p.hp = Math.min(p.maxHp, p.hp + p.maxHp * 0.3);
+    p.maxHp += Math.round(8 * DIFF.lvl); p.dmgMul += 0.07 * DIFF.lvl; p.hp = Math.min(p.maxHp, p.hp + p.maxHp * 0.3 * DIFF.heal);
     addFloat({ x: p.x, y: p.y - 50, text: 'LEVEL UP! Lv.' + p.level, color: '#ffd166', t: 0, life: 1.4, size: 24 });
     burst(p.x, p.y, '#ffd166', 24, 200);
     shock(p.x, p.y, '#ffd166', 160, 0.6, 6); shock(p.x, p.y, '#ffffff', 90, 0.4, 4);
@@ -2607,7 +2637,17 @@ function makeEnemy(type, x, y, zone, kind = 'mob') {
   if (kind === 'elite') { e.hp *= 8; e.r *= 1.8; e.dmg *= 1.4; e.spd *= 0.85; e.xp *= 6; e.name = '정예 ' + d.name; }
   e.hp *= DIFF.hp * (1 + 0.1 * darkLevel); e.dmg *= DIFF.dmg * (1 + 0.08 * darkLevel);   // 난이도 + 짙어진 어둠
   e.maxHp = e.hp;
+  if (DIFF.scaleLv && players.length) { const lv = Math.max(0, partyLevel() - 1); e.hp *= 1 + DIFF.scaleLv * 0.6 * lv * (kind === 'elite' ? 1.6 : 1); e.dmg *= 1 + DIFF.scaleLv * 0.4 * lv; e.maxHp = e.hp; }
   return e;
+}
+// 엘프들이 강해질수록(레벨) 보스·코어·적도 강해져요
+function partyLevel() { const ps = players.filter(q => !q.dead); return ps.length ? ps.reduce((n, q) => n + (q.level || 1), 0) / ps.length : 1; }
+function scaleToParty(e, hpK = 1, dmgK = 0.6) {
+  if (!DIFF.scaleLv) return;
+  const lv = Math.max(0, partyLevel() - 1), k = 1 + DIFF.scaleLv * lv * hpK, kd = 1 + DIFF.scaleLv * lv * dmgK;
+  const r = k / (e.lvK || 1), rd = kd / (e.lvKd || 1);
+  if (r > 1) { e.maxHp *= r; e.hp *= r; e.lvK = k; }
+  if (rd > 1) { e.dmg *= rd; e.lvKd = kd; }
 }
 function makeBoss(def) {
   return {
@@ -2638,13 +2678,17 @@ function summon(x, y, n, types, zone, rad = 90) {
 function damageEnemy(e, dmg, src) {
   if (e.dead) return;
   if (e.kind === 'core' && Net.mode !== 'client') e.shielded = !bossDefeated[e.id];   // 수호자가 쓰러지는 순간 바로 방어막 해제
+  if (e.kind === 'core' && !e.shielded && enemies.some(q => q.guardOf === e.id && !q.dead && dist(q.x, q.y, e.x, e.y) < 750)) {
+    dmg *= 0.35;                                         // 경비대가 살아 있으면 코어가 단단해요
+    if (Math.random() < 0.05) addFloat({ x: e.x, y: e.y - 110, text: '🛡 경비대가 코어를 지켜요! 먼저 물리쳐요', color: '#ffb84d', t: 0, life: 0.8, size: 14 });
+  }
   if (e.shielded) {
     if (Math.random() < 0.25) addFloat({ x: e.x + rand(-20, 20), y: e.y - e.r - 30, text: e.kind === 'core' ? '🛡 수호자를 먼저 쓰러뜨려요!' : '🛡 막힘', color: '#c77dff', t: 0, life: 0.6, size: e.kind === 'core' ? 14 : 16 });
     sfx('hit', e.x, e.y);
     return;
   }
   // 치명타! (기본 10% + 카드 + 피버 중 +10%)
-  const crit = !!(src && src.level) && Math.random() < 0.1 + (src.crit || 0) + (src.feverT > 0 ? 0.1 : 0) + petB(src, 'crit');
+  const crit = !!(src && src.level) && Math.random() < Math.min(0.5, 0.1 + (src.crit || 0) + (src.feverT > 0 ? 0.1 : 0) + petB(src, 'crit'));
   if (crit) dmg *= 2;
   if (e.kind === 'boss' && !e.awake && bossBlocked(e)) {
     if (Math.random() < 0.08) addFloat({ x: e.x, y: e.y - e.r - 30, text: '💤 다른 보스와 싸우는 중이라 잠들어 있어요', color: '#c9b6ff', t: 0, life: 1, size: 14 });
@@ -2709,6 +2753,7 @@ function bossBlocked(b) {
 }
 function wakeBoss(b) {
   if (b.awake || b.dead || bossBlocked(b)) return;
+  scaleToParty(b, 1.2, 0.5);
   b.awake = true;
   if (!b.intro) {
     b.intro = true;
@@ -2932,6 +2977,7 @@ function moveToward(b, tx, ty, spd, dt) {
 }
 
 function updateBoss(b, dt) {
+  if (b.rage) dt *= 1.35;                                // 💢 광폭화: 모든 행동이 빨라져요
   const tgt = bossTarget(b);
   if (!b.awake) {
     b.hp = Math.min(b.maxHp, b.hp + b.maxHp * 0.03 * dt);              // 도망가면 보스 체력이 다시 차요
@@ -2941,6 +2987,11 @@ function updateBoss(b, dt) {
   if (!tgt) { b.awake = false; b.z = 0; b.state = 'idle'; b.burrowed = false; return; }    // 아무도 없으면 잠듦
   b.t += dt;
   const hpR = b.hp / b.maxHp;
+  if (!b.rage && hpR < 0.25 && b.id !== 'lord' && DIFF.id !== 'heal') {
+    b.rage = true; b.dmg *= 1.3;
+    toastAll('💢 ' + b.name + ' 광폭화! 더 빠르고 강해졌어요', '#ff3b3b');
+    sfx('roar', b.x, b.y); shock(b.x, b.y, '#ff3b3b', 360, 0.6, 10); flashScreen('#ff3b3b', 0.25, b.x, b.y); shake = Math.max(shake, 12);
+  }
   if (!b.enr && hpR < 0.5 && b.id !== 'lord') {
     b.enr = true;
     toastAll('🔥 ' + b.name + '이(가) 분노했다!', '#ff7b3c');
@@ -3378,7 +3429,7 @@ function spawner(dt) {
   // 시간이 지날수록 어둠이 짙어지고, 가끔 어둠의 습격이 와요
   if (tut.done && !finalStarted) {
     if (!DIFF.noDark) darkT += dt;
-    if (darkT >= 180 && darkLevel < 6) {
+    if (darkT >= DIFF.darkT && darkLevel < 6) {
       darkT = 0; darkLevel++;
       toastAll('🌑 어둠이 더 짙어졌어요! 모든 적이 강해져요 (' + darkLevel + '단계)', '#c77dff');
       sfx('roar'); flashScreen('#2a1040', 0.35);
@@ -4772,7 +4823,7 @@ function hostLobbyTick(dt) {
   hostBroadcast({ t: 'roster', list, diff: DIFF.id });
 }
 function encEnemy(e) {
-  const fl = (e.kind === 'elite' ? 1 : 0) | (e.burrowed ? 2 : 0) | (e.slowT > 0 ? 4 : 0) | (e.flash > 0 ? 8 : 0) | (e.fuse ? 16 : 0) | (e.cstate === 'wind' ? 32 : 0) | (e.awake ? 64 : 0) | (e.enr ? 128 : 0) | (e.shielded ? 256 : 0);
+  const fl = (e.kind === 'elite' ? 1 : 0) | (e.burrowed ? 2 : 0) | (e.slowT > 0 ? 4 : 0) | (e.flash > 0 ? 8 : 0) | (e.fuse ? 16 : 0) | (e.cstate === 'wind' ? 32 : 0) | (e.awake ? 64 : 0) | (e.enr ? 128 : 0) | (e.shielded ? 256 : 0) | (e.rage ? 512 : 0) | (e.guardOf ? 1024 : 0);
   const a = [e.uid, e.type, Math.round(e.x), Math.round(e.y), Math.round(e.z || 0), Math.round(e.hp), Math.round(e.maxHp), +e.r.toFixed(1), fl];
   if (e.kind === 'boss') a.push(e.state, +(e.ang || 0).toFixed(2), e.face || 1, e.phase || 1, +(e.t || 0).toFixed(2), e.name);
   else if (e.cstate === 'wind') a.push(+(e.cang || 0).toFixed(2));
@@ -4949,7 +5000,7 @@ function clientSnap(d) {
     }
     e.tx = x; e.ty = y; e.z = z; e.hp = hp; e.maxHp = maxHp; e.r = r;
     e.burrowed = !!(fl & 2); e.slowT = fl & 4 ? 1 : 0; if (fl & 8) e.flash = 0.08; e.fuse = fl & 16 ? 0.3 : 0;
-    e.cstate = fl & 32 ? 'wind' : ''; e.awake = !!(fl & 64); e.enr = !!(fl & 128); e.shielded = !!(fl & 256);
+    e.cstate = fl & 32 ? 'wind' : ''; e.awake = !!(fl & 64); e.enr = !!(fl & 128); e.shielded = !!(fl & 256); e.rage = !!(fl & 512); if (fl & 1024) e.guardOf = e.guardOf || true;
     if (e.kind === 'boss') { [e.state, e.ang, e.face, e.phase, e.t, e.name] = a.slice(9); if (e.id === 'lord') finalBoss = e; }
     else if (e.cstate === 'wind') e.cang = a[9];
     next.push(e);
@@ -6291,7 +6342,7 @@ function drawWorld() {
   for (const q of players) if (q.pet && PET[q.pet] && !q.dead && !q.inShop && q.petX !== undefined && inView(q.petX, q.petY)) list.push({ y: q.petY, f: () => drawPetInk(ctx, PET[q.pet], q.petX, q.petY + q.petBob, 1.15 * (1 + (q.petAtkT > 0 ? 0.2 * Math.sin(q.petAtkT / 0.22 * Math.PI) : 0)), gtime, q.petFace || 1) });
   if (inView(CX, CY, 900)) list.push({ y: CY + 60, f: drawTree });
   for (const t of turrets) if (inView(t.x, t.y)) list.push({ y: t.y, f: () => drawTurret(t) });
-  for (const e of enemies) if (!e.dead && inView(e.x, e.y, 200)) list.push({ y: e.y + (e.kind === 'core' ? 30 : 0), f: () => e.kind === 'boss' ? drawBoss(e) : e.kind === 'core' ? (drawCore(e), drawCoreUI(e)) : drawSlime(e) });
+  for (const e of enemies) if (!e.dead && inView(e.x, e.y, 200)) list.push({ y: e.y + (e.kind === 'core' ? 30 : 0), f: () => e.kind === 'boss' ? (e.rage && drawRage(e), drawBoss(e)) : e.kind === 'core' ? (drawGuardLinks(e), drawCore(e), drawCoreUI(e)) : drawSlime(e) });
   for (const d of GUARDIANS) if (inView(d.cx, d.cy, 260)) list.push({ y: d.cy - 20, f: () => drawFactory(d) });
   for (const p of players) list.push({ y: p.y, f: () => drawPlayer(p) });
   list.sort((a, b) => a.y - b.y);
@@ -6661,7 +6712,7 @@ function drawHUDInner() {
       c.restore();
       c.font = '26px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(u.icon, cx0 + 28, y + ch / 2 + 1); c.textBaseline = 'alphabetic';
       c.textAlign = 'left'; c.font = FONT(18); c.fillStyle = UI.red; c.fillText(u.name, cx0 + 54, y + 24);
-      c.font = FONT(15); c.fillStyle = UI.ink; c.fillText(u.desc, cx0 + 54, y + 44);
+      c.font = FONT(15); c.fillStyle = UI.ink; c.fillText(upDesc(u), cx0 + 54, y + 44);
       if (!touchUI.enabled) {
         const key = ['8', '9', '0'][i];
         c.fillStyle = UI.red; circle(c, cx0 + cw - 18, y + ch / 2, 11); c.fill(); c.strokeStyle = UI.ink; c.lineWidth = 1.5; c.stroke();
