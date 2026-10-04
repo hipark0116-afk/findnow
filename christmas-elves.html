@@ -12,6 +12,7 @@
     --sal: env(safe-area-inset-left, 0px);
     --sar: env(safe-area-inset-right, 0px);
     --sab: env(safe-area-inset-bottom, 0px);
+    --vw: 100vw; --vh: 100vh;
     --paper: #fbf0dc;
     --paper-2: #efdcba;
     --cream: #fffaf0;
@@ -35,6 +36,11 @@
     user-select: none;
   }
   canvas#game { display: block; cursor: crosshair; }
+  /* 휴대폰을 세로로 들고 있으면 게임 전체를 가로로 돌려서 보여 줘요 */
+  html.rot {
+    --sal: env(safe-area-inset-top, 0px); --sar: env(safe-area-inset-bottom, 0px); --sab: env(safe-area-inset-left, 0px);
+  }
+  html.rot body { position: fixed; top: 0; left: 0; width: var(--vw); height: var(--vh); transform-origin: 0 0; transform: translateX(var(--pw)) rotate(90deg); }
 
   /* 종이 패널 */
   .paper {
@@ -154,7 +160,7 @@
   /* ===== 하단 스토리 박스 ===== */
   #storyBox {
     position: fixed; left: 50%; bottom: calc(12px + var(--sab)); transform: translateX(-50%);
-    width: min(980px, calc(100vw - 24px - var(--sal) - var(--sar)));
+    width: min(980px, calc(var(--vw) - 24px - var(--sal) - var(--sar)));
   }
   #storyTabs { display: flex; gap: 6px; padding: 14px 12px 0; align-items: flex-end; border-bottom: 2px solid var(--ink); }
   .tab {
@@ -210,7 +216,7 @@
     background: rgba(20, 12, 8, 0.6); z-index: 10;
   }
   #overlay.on { display: flex; }
-  .card { position: relative; width: min(540px, calc(100vw - 32px)); padding: 0 0 22px; text-align: center; }
+  .card { position: relative; width: min(540px, calc(var(--vw) - 32px)); padding: 0 0 22px; text-align: center; }
   .cardHead { border-radius: 15px 10px 0 0 / 10px 17px 0 0; padding: 22px 16px 10px; }
   .card h2 { margin: 0; font-size: 50px; line-height: 1.05; }
   .card p { font-size: 21px; line-height: 1.45; margin: 6px 16px; color: var(--ink); }
@@ -221,9 +227,9 @@
   .card button.go { background: var(--green); }
   .card button.go:hover { background: #4c7c52; }
 
-  @media (max-width: 760px) {
-    #lobby { left: 12px; right: 12px; width: auto; }
-  }
+  /* (max-width: 760px) — 게임 화면 크기 기준 */
+  html.mw760 #lobby { left: 12px; right: 12px; width: auto; }
+
   /* ===== 모바일 / 작은 화면 ===== */
   html, body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
   canvas#game { touch-action: none; }
@@ -238,26 +244,26 @@
   #storyBox.collapsed .sndBtn:first-of-type { margin-left: 0; }
   #storyTicker.pulse { animation: tickerPulse 0.8s ease-out; }
   @keyframes tickerPulse { 0% { background: #ffe9c2; box-shadow: 0 0 10px #ffb347; } 100% { background: var(--cream); box-shadow: none; } }
-  @media (max-width: 640px) {
-    .tab { font-size: 15px; padding: 1px 8px 0; }
-    .sndBtn .lbl, #toggleStory .lbl { display: none; }
-    #storyBody { height: 104px; padding: 8px 10px; }
-    #portrait { width: 52px; height: 52px; font-size: 28px; }
-    #storyText { font-size: 19px; }
-  }
-  @media (max-width: 500px) {
-    #lobby h1 { font-size: 34px; }
-    .lobbyHead { padding: 16px 10px 6px; }
-  }
-  @media (max-height: 560px) {
-    .lobbyHead { padding: 12px 12px 4px; }
-    #lobby h1 { font-size: 30px; }
-    .mc { font-size: 20px; }
-    #lobby .sub { display: none; }
-    #storyBody { height: 90px; }
-    #storyText { font-size: 18px; }
-    #startBtn { font-size: 26px; }
-  }
+  /* (max-width: 640px) — 게임 화면 크기 기준 */
+  html.mw640 .tab { font-size: 15px; padding: 1px 8px 0; }
+  html.mw640 .sndBtn .lbl, html.mw640 #toggleStory .lbl { display: none; }
+  html.mw640 #storyBody { height: 104px; padding: 8px 10px; }
+  html.mw640 #portrait { width: 52px; height: 52px; font-size: 28px; }
+  html.mw640 #storyText { font-size: 19px; }
+
+  /* (max-width: 500px) — 게임 화면 크기 기준 */
+  html.mw500 #lobby h1 { font-size: 34px; }
+  html.mw500 .lobbyHead { padding: 16px 10px 6px; }
+
+  /* (max-height: 560px) — 게임 화면 크기 기준 */
+  html.mh560 .lobbyHead { padding: 12px 12px 4px; }
+  html.mh560 #lobby h1 { font-size: 30px; }
+  html.mh560 .mc { font-size: 20px; }
+  html.mh560 #lobby .sub { display: none; }
+  html.mh560 #storyBody { height: 90px; }
+  html.mh560 #storyText { font-size: 18px; }
+  html.mh560 #startBtn { font-size: 26px; }
+
   /* 세로로 들었을 때 안내 */
   #rotateHint { position: fixed; inset: 0; z-index: 30; display: none; align-items: center; justify-content: center; background: linear-gradient(180deg, #120d12, #2b1e18); text-align: center; padding: 24px; }
   #rotateHint.on { display: flex; }
@@ -266,32 +272,32 @@
   #rotateHint .phone { width: 60px; height: 100px; margin: 0 auto; border: 4px solid var(--paper); border-radius: 12px; box-shadow: 0 0 18px #ffb347; animation: rotPhone 2s ease-in-out infinite; }
   @keyframes rotPhone { 0%, 30% { transform: rotate(0deg); } 60%, 100% { transform: rotate(-90deg); } }
   /* 가로 휴대폰 (낮은 화면) 용 촘촘한 배치 */
-  @media (max-height: 500px) {
-    #lobby { top: 8px; width: 430px; }
-    .lobbyHead { padding: 8px 10px 4px; display: flex; align-items: baseline; justify-content: center; gap: 10px; }
-    .lobbyHead .mc { font-size: 18px; }
-    #lobby h1 { font-size: 26px; margin: 0; }
-    #lobby .label { margin: 5px 0 3px; font-size: 15px; }
-    #nameInput { font-size: 17px; padding: 1px 10px; }
-    #charGrid { gap: 3px; }
-    .charBtn canvas { max-width: 28px; }
-    #charInfo { margin-top: 4px; padding: 2px 8px; font-size: 15px; }
-    #slotDots { display: none; }
-    .lobbyFoot { padding: 0 12px 6px; }
-    .lobbyFoot .modeRow { margin-top: 4px; }
-    .modeBtn { padding: 2px; font-size: 14px; }
-    #startBtn { margin-top: 5px; font-size: 24px; }
-    #best { display: none; }
-    .netPanel { margin-top: 4px; padding: 4px 8px; font-size: 15px; }
-    .netPanel b#roomCode { font-size: 26px; }
-    #storyTabs { padding: 10px 8px 0; gap: 4px; }
-    .tab, .sndBtn, #toggleStory, #storyTicker { font-size: 14px; }
-    .card { max-height: calc(100vh - 16px); overflow-y: auto; }
-    .card h2 { font-size: 34px; }
-    .card .big { font-size: 48px; }
-    .card p { font-size: 17px; margin: 3px 12px; }
-    .card button { margin-top: 8px; font-size: 24px; }
-  }
+  /* (max-height: 500px) — 게임 화면 크기 기준 */
+  html.mh500 #lobby { top: 8px; width: 430px; }
+  html.mh500 .lobbyHead { padding: 8px 10px 4px; display: flex; align-items: baseline; justify-content: center; gap: 10px; }
+  html.mh500 .lobbyHead .mc { font-size: 18px; }
+  html.mh500 #lobby h1 { font-size: 26px; margin: 0; }
+  html.mh500 #lobby .label { margin: 5px 0 3px; font-size: 15px; }
+  html.mh500 #nameInput { font-size: 17px; padding: 1px 10px; }
+  html.mh500 #charGrid { gap: 3px; }
+  html.mh500 .charBtn canvas { max-width: 28px; }
+  html.mh500 #charInfo { margin-top: 4px; padding: 2px 8px; font-size: 15px; }
+  html.mh500 #slotDots { display: none; }
+  html.mh500 .lobbyFoot { padding: 0 12px 6px; }
+  html.mh500 .lobbyFoot .modeRow { margin-top: 4px; }
+  html.mh500 .modeBtn { padding: 2px; font-size: 14px; }
+  html.mh500 #startBtn { margin-top: 5px; font-size: 24px; }
+  html.mh500 #best { display: none; }
+  html.mh500 .netPanel { margin-top: 4px; padding: 4px 8px; font-size: 15px; }
+  html.mh500 .netPanel b#roomCode { font-size: 26px; }
+  html.mh500 #storyTabs { padding: 10px 8px 0; gap: 4px; }
+  html.mh500 .tab, html.mh500 .sndBtn, html.mh500 #toggleStory, html.mh500 #storyTicker { font-size: 14px; }
+  html.mh500 .card { max-height: calc(var(--vh) - 16px); overflow-y: auto; }
+  html.mh500 .card h2 { font-size: 34px; }
+  html.mh500 .card .big { font-size: 48px; }
+  html.mh500 .card p { font-size: 17px; margin: 3px 12px; }
+  html.mh500 .card button { margin-top: 8px; font-size: 24px; }
+
   /* 휴대폰 게임 중: 이야기는 조이스틱과 버튼 사이의 얇은 띠로 */
   body.mini #storyBox { transform: none; bottom: calc(4px + var(--sab)); border-width: 1.5px; box-shadow: 2px 2px 0 rgba(58, 42, 31, 0.35); opacity: 0.92; }
   body.mini #storyBox .bulbs, body.mini #storyBox .lights, body.mini #storyBox .light { display: none; }
@@ -336,10 +342,10 @@
   body.mini #storyBox::before, body.mini #storyBox::after { display: none; }
   #storyBox { transition: opacity 0.3s; }
   body.cine #storyBox { opacity: 0; pointer-events: none; }
-  @media (max-height: 500px) {
-    .paper::before { width: 34px; height: 26px; top: -11px; }
-    #startBtn { font-size: 26px; }
-  }
+  /* (max-height: 500px) — 게임 화면 크기 기준 */
+  html.mh500 .paper::before { width: 34px; height: 26px; top: -11px; }
+  html.mh500 #startBtn { font-size: 26px; }
+
   @media (prefers-reduced-motion: reduce) { .bulb, .night::before, #storyTicker.pulse { animation: none; } }
 </style>
 </head>
@@ -501,15 +507,32 @@ function pickMobType(x, y) {
 const cvs = document.getElementById('game');
 const ctx = cvs.getContext('2d');
 let VW = 0, VH = 0, DPR = 1;
+// 휴대폰(짧은 쪽이 520px 이하인 손가락 기기)만 가로로 돌려요. 태블릿·컴퓨터는 그대로!
+const PHONE_ROT = /[?&]rot=1/.test(location.search) || ((('ontouchstart' in window) || navigator.maxTouchPoints > 0)
+  && !!(window.matchMedia && matchMedia('(pointer: coarse)').matches) && Math.min(screen.width, screen.height) <= 520);
+let ROT = false;
 function resize() {
+  ROT = PHONE_ROT && innerHeight > innerWidth * 1.05;
+  const de = document.documentElement;
+  de.classList.toggle('rot', ROT);
   DPR = Math.min(window.devicePixelRatio || 1, (('ontouchstart' in window) || navigator.maxTouchPoints > 0) ? 1.5 : 2);
-  VW = innerWidth; VH = innerHeight;
+  VW = ROT ? innerHeight : innerWidth; VH = ROT ? innerWidth : innerHeight;
+  de.style.setProperty('--vw', VW + 'px'); de.style.setProperty('--vh', VH + 'px'); de.style.setProperty('--pw', innerWidth + 'px');
+  for (const n of [760, 640, 500]) de.classList.toggle('mw' + n, VW <= n);
+  for (const n of [560, 500]) de.classList.toggle('mh' + n, VH <= n);
   cvs.width = VW * DPR; cvs.height = VH * DPR;
   cvs.style.width = VW + 'px'; cvs.style.height = VH + 'px';
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
 }
 addEventListener('resize', resize);
 resize();
+// 화면 좌표 → 게임 좌표 (돌려진 화면에서도 맞게)
+function toGame(cx, cy) { return ROT ? { x: cy, y: innerWidth - cx } : { x: cx, y: cy }; }
+function lrect(elm) {
+  const r = elm.getBoundingClientRect();
+  if (!ROT) return r;
+  return { left: r.top, right: r.bottom, top: innerWidth - r.right, bottom: innerWidth - r.left, width: r.height, height: r.width };
+}
 
 // ---------- 유틸 ----------
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -5107,7 +5130,7 @@ cvs.addEventListener('mousemove', e => { if (touchUI.enabled && (Math.abs(e.move
 addEventListener('keydown', e => { if (touchUI.enabled && e.code !== 'Enter' && document.activeElement.tagName !== 'INPUT') disableTouch(); });
 // 전체 화면 + 가로 고정 (안드로이드 크롬 등 되는 곳에서만, 안 되면 조용히 넘어가요)
 function tryLandscape() {
-  if (!touchUI.enabled) return;
+  if (!touchUI.enabled || !PHONE_ROT) return;              // 태블릿은 그대로 둬요
   try {
     const de = document.documentElement, fs = de.requestFullscreen || de.webkitRequestFullscreen;
     if (fs && !document.fullscreenElement) {
@@ -5117,10 +5140,11 @@ function tryLandscape() {
   } catch (e) { /* 미지원 */ }
 }
 function checkRotate() {
-  rotateBlocked = (IS_PHONE || touchUI.enabled) && VH > VW * 1.05;
+  rotateBlocked = false;                                 // 휴대폰은 자동으로 가로로 돌려 주고, 태블릿·컴퓨터는 세로도 OK
   el('rotateHint').classList.toggle('on', rotateBlocked);
 }
 function canvasPoint(t) {
+  if (ROT) return toGame(t.clientX, t.clientY);
   const r = cvs.getBoundingClientRect();
   return { x: t.clientX - r.left, y: t.clientY - r.top };
 }
@@ -5215,7 +5239,7 @@ function drawTouchControls() {
   if (!p) return;
   // 이야기가 작은 띠일 때는 화면 맨 아래까지 버튼을 내려요 (게임 화면을 넓게)
   const mini = document.body.classList.contains('mini');
-  const boxTop = mini ? VH - SAFE.b - 4 : el('storyBox').getBoundingClientRect().top - cvs.getBoundingClientRect().top;
+  const boxTop = mini ? VH - SAFE.b - 4 : lrect(el('storyBox')).top - lrect(cvs).top;
   const k = touchUI.bs = clamp(VH / 500, 0.7, 1);         // 낮은 화면일수록 버튼도 작게
   const L = SAFE.l + 10, Rr = VW - SAFE.r - 10;
   // ⏸ 일시정지 · 🎯 조준 바꾸기 (상태창 아래)
@@ -5288,8 +5312,8 @@ function placeMiniStory(x0, x1) {
   const b = el('storyBox'); b.style.left = x + 'px'; b.style.width = w + 'px';
 }
 function layoutLobby() {
-  const top = el('storyBox').getBoundingClientRect().top;
-  const want = Math.max(12, Math.round(innerHeight - top + 10)) + 'px';
+  const top = lrect(el('storyBox')).top;
+  const want = Math.max(12, Math.round(VH - top + 10)) + 'px';
   if (el('lobby').style.bottom !== want) el('lobby').style.bottom = want;
 }
 addEventListener('resize', autoStoryLayout);
@@ -6485,7 +6509,7 @@ function drawHUDInner() {
     g.addColorStop(0, 'rgba(255,140,40,0)'); g.addColorStop(1, 'rgba(255,140,40,' + (0.22 + 0.08 * Math.sin(gtime * 8)) + ')');
     c.fillStyle = g; c.fillRect(0, 0, VW, VH);
   }
-  const boxTop = el('storyBox').getBoundingClientRect().top / hudS;
+  const boxTop = lrect(el('storyBox')).top / hudS;
   c.textBaseline = 'alphabetic';
   // 왼쪽 위: 플레이어 상태 (종이 카드 + 꼬마전구)
   paperPanel(c, 12, 16, 280, 96, 14);
@@ -6800,7 +6824,7 @@ function updateLobby(dt) {
     if (ix) lobbyElf.face = ix > 0 ? 1 : -1;
   }
   const right = VW > 760 ? VW - 404 : VW;
-  const bottom = el('storyBox').getBoundingClientRect().top - 30;
+  const bottom = lrect(el('storyBox')).top - 30;
   lobbyElf.x = clamp(lobbyElf.x, 30, right - 30);
   lobbyElf.y = clamp(lobbyElf.y, VH * 0.56, Math.max(VH * 0.56, bottom));
 }
