@@ -425,6 +425,8 @@
         <div><b>스킬</b> <kbd>F</kbd> 번개 사슬 · <kbd>G</kbd> 눈보라 회오리</div>
         <div><b>스킬</b> <kbd>C</kbd> 치유의 종 · <kbd>V</kbd> 루돌프 돌진</div>
         <div><b>💀 수호자 + ⚙ 코어</b> 수호자를 쓰러뜨리면 옆 공장 코어의 방어막이 꺼져요 → 경비대를 물리치고 코어를 부숴 ⭐별조각 (6개 필요)</div>
+        <div><b>🌙 낮과 밤</b> 밤엔 빛 근처만 보여요 · 적이 강하지만 경험치 +25%</div>
+        <div><b>⛈ 날씨</b> 눈 · 눈보라(느려짐) · 천둥번개(번개 원을 피해요) · 안개</div>
         <div><b>💢 광폭화</b> 보스 체력이 25% 아래면 더 빠르고 강해져요 · 엘프가 강해질수록 보스도 강해져요</div>
         <div><b>👹 중간 보스</b> 지역마다 1마리 → ✦ 새 스킬 두루마리</div>
         <div><b>🧊 빙하</b> 미끄러워요 · <b>🌋 화산</b> 용암 뜨거움</div>
@@ -1210,7 +1212,7 @@ function updatePlayer(p, dt) {
     p.vx = p.dvx * 0.35; p.vy = p.dvy * 0.35;
     if (Math.random() < 0.8) particles.push({ x: p.x, y: p.y + 6, vx: rand(-30, 30), vy: rand(-30, 30), life: 0.35, max: 0.35, color: p.look.coat, size: rand(3, 6) });
   } else {
-    const spd = p.speed * ter.slow * (p.slowT > 0 ? 0.6 : 1) * (p.feverT > 0 ? 1.15 : 1) * (p.speedT > 0 ? 1.35 : 1) * (1 + petB(p, 'spd'));
+    const spd = p.speed * ter.slow * (p.slowT > 0 ? 0.6 : 1) * (p.feverT > 0 ? 1.15 : 1) * (p.speedT > 0 ? 1.35 : 1) * (1 + petB(p, 'spd')) * (atmo.wx === 'blizzard' ? 0.9 : 1);
     const k = Math.min(1, (ter.ice ? 2.4 : 30) * dt);   // 빙판에서는 미끄러짐
     p.vx = lerp(p.vx, ix * spd, k); p.vy = lerp(p.vy, iy * spd, k);
     p.x += p.vx * dt; p.y += p.vy * dt;
@@ -2356,6 +2358,262 @@ function drawCoreUI(e) {
   ctx.strokeText(t, e.x, e.y - 140); ctx.fillText(t, e.x, e.y - 140); ctx.restore();
 }
 
+// =====================================================================
+//  분위기: 낮과 밤 · 날씨(눈 · 눈보라 · 천둥번개 · 안개) · 밤의 공포
+// =====================================================================
+const DAY_LEN = 360;                                  // 낮 150초 → 저녁 30초 → 밤 150초 → 새벽 30초
+const WEATHERS = {
+  clear:   { name: '맑음',     icon: '☀️', w: 30, calm: true },
+  snow:    { name: '눈',       icon: '🌨', w: 25, calm: true },
+  blizzard:{ name: '눈보라',   icon: '❄️', w: 15 },
+  thunder: { name: '천둥번개', icon: '⛈', w: 15 },
+  fog:     { name: '안개',     icon: '🌫', w: 12, calm: true },
+};
+const atmo = { day: 20, wx: 'clear', wxT: 60, wxDur: 60, bolts: [], lightT: 0, strikeT: 3, horrorT: 25, eyes: [], shadow: null, told: {} };
+// 밤의 어두움 (0 = 낮, 1 = 한밤중)
+function nightK() {
+  const t = atmo.day % DAY_LEN;
+  if (t < 150) return 0;
+  if (t < 180) return (t - 150) / 30;
+  if (t < 330) return 1;
+  return 1 - (t - 330) / 30;
+}
+function isNight() { return nightK() > 0.6; }
+function dayPhaseName() { const t = atmo.day % DAY_LEN; return t < 150 ? '낮' : t < 180 ? '저녁' : t < 330 ? '밤' : '새벽'; }
+function updateAtmosphere(dt) {                      // 방장(혼자일 땐 내 컴퓨터)만 시간과 날씨를 정해요
+  if (!tut.done) return;
+  const wasNight = isNight();
+  atmo.day += dt * (DIFF.calm ? 0.8 : 1);
+  if (!wasNight && isNight()) { sayAll('holly', '밤이 왔어… 어둠이 가장 강해지는 시간이야. 빛 가까이에 머물고, 어둠 속에서 빛나는 눈을 조심하렴.'); toastAll('🌙 밤이 되었어요 · 적이 더 강하지만 경험치 +25%', '#9fb4ff'); }
+  if (wasNight && !isNight() && atmo.day % DAY_LEN > 300) toastAll('🌅 새벽이 밝아와요', '#ffd8a0');
+  atmo.wxT -= dt;
+  if (atmo.wxT <= 0) {
+    const pool = Object.entries(WEATHERS).filter(([, w]) => !DIFF.calm || w.calm);
+    let tot = 0; for (const [, w] of pool) tot += w.w;
+    let v = Math.random() * tot, id = 'clear';
+    for (const [k, w] of pool) if ((v -= w.w) < 0) { id = k; break; }
+    if (id === atmo.wx) id = 'clear';
+    atmo.wx = id; atmo.wxDur = atmo.wxT = rand(45, 80);
+    if (id !== 'clear') toastAll(WEATHERS[id].icon + ' 날씨가 바뀌었어요: ' + WEATHERS[id].name + (id === 'thunder' ? ' · 번개 표시를 피해요!' : id === 'blizzard' ? ' · 앞이 잘 안 보여요' : id === 'fog' ? ' · 짙은 안개' : ''), '#c9d6ff');
+    if (id === 'thunder' && !atmo.told.thunder) { atmo.told.thunder = 1; sayAll('spark', '하늘이 울려! 땅에 빛나는 원이 생기면 거기서 번개가 떨어져. 얼른 피해!'); }
+    if (id === 'fog' && !atmo.told.fog) { atmo.told.fog = 1; sayAll('spark', '안개가 짙어졌어… 뭔가가 안개 속에서 우릴 지켜보는 것 같아.'); }
+  }
+  // 천둥번개: 엘프 근처에 번개가 떨어져요 (적도 맞아요)
+  if (atmo.wx === 'thunder' && !DIFF.calm) {
+    atmo.strikeT -= dt;
+    if (atmo.strikeT <= 0) {
+      atmo.strikeT = rand(2.2, 4.5) / (DIFF.id === 'hell' ? 1.4 : 1);
+      for (const p of alivePlayers()) {
+        if (Math.random() < 0.35) continue;
+        hazards.push({ x: p.x + rand(-230, 230), y: p.y + rand(-170, 170), r: 80, t: 0, delay: 1.25, dmg: 26 * DIFF.dmg, team: 'enemy', color: '#bfe9ff', bolt: true });
+      }
+    }
+  }
+}
+// 번개가 내리치는 순간 (방장 + 친구 화면)
+function lightningStrike(x, y) {
+  atmo.bolts.push({ x, y, t: 0, seed: Math.random() * 100 });
+  atmo.lightT = 1;
+  shake = Math.max(shake, 9);
+  const d = local ? dist(x, y, local.x, local.y) : 0;
+  sfxLocal(d < 500 ? 'thunder_near' : 'thunder', 1);
+}
+// 밤에 일어나는 무서운 일들 (내 화면에서만)
+function updateHorror(dt) {
+  atmo.lightT = Math.max(0, atmo.lightT - dt * 2.2);
+  for (const b of atmo.bolts) b.t += dt;
+  atmo.bolts = atmo.bolts.filter(b => b.t < 0.45);
+  if (!local || DIFF.calm || state !== 'play' || paused || shopUI) return;
+  for (const e of atmo.eyes) e.t += dt;
+  atmo.eyes = atmo.eyes.filter(e => e.t < e.dur);
+  if (atmo.shadow) { atmo.shadow.t += dt; if (atmo.shadow.t > 3) atmo.shadow = null; }
+  const nk = nightK();
+  if (nk < 0.6 && atmo.wx !== 'fog') return;
+  atmo.horrorT -= dt;
+  if (atmo.horrorT > 0) return;
+  atmo.horrorT = rand(14, 28);
+  const r = Math.random();
+  if (r < 0.4) {                                       // 어둠 속에서 붉은 눈이 떴다 감아요
+    const n = Math.random() < 0.3 ? 3 : 1;
+    for (let i = 0; i < n; i++) atmo.eyes.push({ x: rand(0.08, 0.92), y: rand(0.12, 0.7), t: -i * 0.4, dur: 2.8, s: rand(0.8, 1.6) });
+    sfxLocal('whisper');
+  } else if (r < 0.6) { atmo.shadow = { t: 0, dir: Math.random() < 0.5 ? 1 : -1, y: rand(0.3, 0.7) }; sfxLocal('creak'); }
+  else if (r < 0.78) sfxLocal('howl');
+  else if (r < 0.9) sfxLocal('musicbox');
+  else sfxLocal('bell_toll');
+}
+// 밤 어둠 그리기: 작게 그린 어둠 판에서 빛나는 곳을 지우고 화면에 크게 덮어요
+const nightCv = document.createElement('canvas'), nctx = nightCv.getContext('2d');
+function sceneDarkness() {
+  let d = nightK() * (DIFF.calm ? 0.45 : DIFF.id === 'hell' ? 0.9 : 0.82);
+  if (atmo.wx === 'fog') d = Math.max(d, DIFF.calm ? 0.2 : 0.42);
+  if (atmo.wx === 'thunder') d = Math.max(d, 0.35);
+  if (atmo.wx === 'blizzard') d = Math.max(d, 0.25);
+  return d * (1 - atmo.lightT * 0.9);
+}
+function gatherLights() {
+  const L = [], fog = atmo.wx === 'fog' || atmo.wx === 'blizzard' ? 0.72 : 1;
+  const inV = (x, y, m) => x > cam.x - m && x < cam.x + VW + m && y > cam.y - m && y < cam.y + VH + m;
+  for (const p of players) if (!p.dead && !p.inShop) { L.push([p.x, p.y - 10, (p === local ? 270 : 200) * fog * (1 + Math.sin(gtime * 9 + p.id) * 0.025), 1, '#ffd08a']); if (p.petX !== undefined && p.pet) L.push([p.petX, p.petY, 70, 0.8, null]); }
+  if (inV(CX, CY, 900)) L.push([CX, CY - 200, 420 + treeLight * 500, 1, '#ffe7a0']);
+  for (const d of decor) {
+    if (!inV(d.x, d.y, 300)) continue;
+    if (d.t === 'lamp') L.push([d.x, d.y - 40, 190, 0.95, '#ffd08a']);
+    else if (d.t === 'house') L.push([d.x, d.y - 10, 160, 0.8, '#ffb347']);
+    else if (d.t === 'lava' || d.t === 'vent') L.push([d.x, d.y, 120 * d.s, 0.55, '#ff6a2a']);
+    else if (d.t === 'mushroom') L.push([d.x, d.y, 80, 0.7, '#7dffd0']);
+    else if (d.t === 'crystal') L.push([d.x, d.y - 20, 110, 0.6, '#9fe3ff']);
+  }
+  for (const q of SHOPS) if (inV(q.x, q.y, 320)) L.push([q.x, q.y - 30, 320, 1, '#ffd166']);
+  for (const g of GUARDIANS) if (inV(g.cx, g.cy, 300)) L.push([g.cx, g.cy - 40, 240, 0.9, CORE_STYLE[g.id].c]);
+  for (const e of enemies) if (!e.dead && e.kind === 'boss' && inV(e.x, e.y, 300)) L.push([e.x, e.y - (e.z || 0), e.r * 2.6, 0.7, null]);
+  for (const b of atmo.bolts) L.push([b.x, b.y, 380 * (1 - b.t / 0.45), 1, null]);
+  let n = 0;
+  for (const b of bullets) { if (n++ > 40) break; if (inV(b.x, b.y, 60)) L.push([b.x, b.y, 55, 0.6, null]); }
+  return L;
+}
+function drawNightMask(dark) {
+  const S = 0.25, w = Math.max(1, Math.ceil(VW * S)), h = Math.max(1, Math.ceil(VH * S));
+  if (nightCv.width !== w || nightCv.height !== h) { nightCv.width = w; nightCv.height = h; }
+  const n = nctx, lights = gatherLights();
+  n.globalCompositeOperation = 'source-over'; n.clearRect(0, 0, w, h);
+  n.fillStyle = atmo.wx === 'fog' && nightK() < 0.5 ? 'rgba(40,48,58,' + dark + ')' : 'rgba(5,7,20,' + dark + ')';
+  n.fillRect(0, 0, w, h);
+  n.globalCompositeOperation = 'destination-out';
+  for (const [x0, y0, r0, a] of lights) {
+    const x = (x0 - cam.x) * S, y = (y0 - cam.y) * S, r = r0 * S;
+    if (x < -r || y < -r || x > w + r || y > h + r) continue;
+    const g = n.createRadialGradient(x, y, r * 0.12, x, y, r);
+    g.addColorStop(0, 'rgba(0,0,0,' + a + ')'); g.addColorStop(0.55, 'rgba(0,0,0,' + a * 0.6 + ')'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    n.fillStyle = g; n.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+  ctx.drawImage(nightCv, 0, 0, VW, VH);
+  // 따뜻한 불빛 색 (덧칠)
+  if (fxLow) return;
+  ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.18 * Math.min(1, dark * 1.4);
+  let n2 = 0;
+  for (const [x0, y0, r0, , col] of lights) {
+    if (!col || r0 > 420 || n2 > 10) continue;
+    const x = x0 - cam.x, y = y0 - cam.y; if (x < -r0 || y < -r0 || x > VW + r0 || y > VH + r0) continue;
+    n2++; ctx.drawImage(glowSprite(col), x - r0 * 0.6, y - r0 * 0.6, r0 * 1.2, r0 * 1.2);
+  }
+  ctx.restore();
+}
+// 어둠 위에 그리는 것들: 적의 빛나는 눈, 적 탄환, 위험 표시 (어둠 속에서도 보여야 공평해요)
+function drawDarkGlows(dark) {
+  const c = ctx, k = Math.min(1, dark * 1.3);
+  c.save(); c.globalCompositeOperation = 'lighter';
+  for (const e of enemies) {
+    if (e.dead || e.burrowed || e.kind === 'core') continue;
+    const x = e.x - cam.x, y = e.y - (e.z || 0) - cam.y;
+    if (x < -60 || y < -60 || x > VW + 60 || y > VH + 60) continue;
+    const r = e.r, col = e.eye || '#ff3b3b', blink = Math.sin(gtime * 2 + (e.seed || 0) * 5) > 0.97 ? 0.1 : 1;
+    c.globalAlpha = 0.9 * k * blink * (e.alpha || 1);
+    for (const sx of [-1, 1]) c.drawImage(glowSprite(col), x + sx * r * 0.32 - r * 0.35, y - r * 0.2 - r * 0.35, r * 0.7, r * 0.7);
+  }
+  c.globalAlpha = 0.8 * k;
+  let n = 0;
+  for (const b of ebullets) { if (n++ > 120) break; const x = b.x - cam.x, y = b.y - cam.y; if (x < -20 || y < -20 || x > VW + 20 || y > VH + 20) continue; c.drawImage(glowSprite(b.color), x - b.r * 2, y - b.r * 2, b.r * 4, b.r * 4); }
+  c.globalCompositeOperation = 'source-over';
+  for (const h of hazards) {
+    if (!(h.team === 'enemy' || h.team === 'pool')) continue;
+    const x = h.x - cam.x, y = h.y - cam.y;
+    if (x < -h.r || y < -h.r || x > VW + h.r || y > VH + h.r) continue;
+    c.globalAlpha = 0.55 * k; c.strokeStyle = h.color || '#ff5a67'; c.lineWidth = 2.5; c.setLineDash(h.bolt ? [10, 6] : []);
+    circle(c, x, y, h.r); c.stroke();
+    if (h.delay && h.team === 'enemy') { c.globalAlpha = 0.35 * k; c.fillStyle = h.color; circle(c, x, y, h.r * Math.min(1, h.t / h.delay)); c.fill(); }
+  }
+  c.setLineDash([]);
+  c.restore();
+}
+// 날씨 그리기 (화면 앞쪽)
+function drawWeather(dt, dark) {
+  const c = ctx, wx = atmo.wx, bio = local ? biomeAt(local.x, local.y).id : 'snow';
+  const sand = bio === 'desert', ash = bio === 'volcano';
+  c.save();
+  if (wx === 'snow' || wx === 'blizzard' || wx === 'thunder') {
+    const heavy = wx === 'blizzard', n = heavy ? 160 : wx === 'thunder' ? 110 : 70, ang = heavy ? 0.9 : wx === 'thunder' ? 0.35 : 0.2;
+    c.strokeStyle = sand ? 'rgba(232,190,120,0.75)' : ash ? 'rgba(120,110,110,0.7)' : wx === 'thunder' ? 'rgba(190,210,255,0.55)' : 'rgba(255,255,255,0.8)';
+    c.lineWidth = heavy ? 2 : 1.6; c.beginPath();
+    const sp = heavy ? 900 : wx === 'thunder' ? 1100 : 180, len = heavy ? 26 : wx === 'thunder' ? 22 : 4;
+    for (let i = 0; i < n; i++) {
+      const x = ((i * 173.7 + gtime * sp * Math.sin(ang)) % (VW + 200)) - 100, y = ((i * 97.3 + gtime * sp * Math.cos(ang) * (1 + (i % 3) * 0.2)) % (VH + 60)) - 30;
+      c.moveTo(x, y); c.lineTo(x - Math.sin(ang) * len, y - Math.cos(ang) * len);
+    }
+    c.stroke();
+  }
+  if (wx === 'blizzard' || wx === 'fog') {                  // 하얀 눈보라 / 회색 안개 장막
+    const col = wx === 'fog' ? '150,165,170' : sand ? '225,190,130' : '235,242,255';
+    for (let i = 0; i < 6; i++) {
+      const x = ((i * 397 + gtime * (wx === 'fog' ? 25 : 160) * (i % 2 ? 1 : 0.6)) % (VW + 600)) - 300, y = (i * 233) % VH, R = 260 + (i % 3) * 120;
+      const g = c.createRadialGradient(x, y, 10, x, y, R); g.addColorStop(0, 'rgba(' + col + ',' + (wx === 'fog' ? 0.32 : 0.28) + ')'); g.addColorStop(1, 'rgba(' + col + ',0)');
+      c.fillStyle = g; c.fillRect(x - R, y - R, R * 2, R * 2);
+    }
+  }
+  if (wx === 'thunder') {                                   // 먹구름 그림자
+    const g = c.createLinearGradient(0, 0, 0, VH * 0.35); g.addColorStop(0, 'rgba(20,22,40,0.45)'); g.addColorStop(1, 'rgba(20,22,40,0)');
+    c.fillStyle = g; c.fillRect(0, 0, VW, VH * 0.35);
+  }
+  // 번개 줄기
+  for (const b of atmo.bolts) {
+    const x = b.x - cam.x, y = b.y - cam.y, a = 1 - b.t / 0.45;
+    c.strokeStyle = 'rgba(230,240,255,' + a + ')'; c.lineWidth = 5; c.shadowColor = '#9fd3ff'; c.shadowBlur = 30;
+    introBolt(c, x + 40, -20, x, y, b.seed); c.lineWidth = 2; introBolt(c, x + 40, -20, x, y, b.seed);
+    c.shadowBlur = 0;
+  }
+  if (atmo.lightT > 0) { c.fillStyle = 'rgba(220,235,255,' + atmo.lightT * 0.45 + ')'; c.fillRect(0, 0, VW, VH); }
+  // 무서운 붉은 눈
+  for (const e of atmo.eyes) {
+    if (e.t < 0) continue;
+    const k = Math.min(1, e.t / 0.6, (e.dur - e.t) / 0.6), x = e.x * VW, y = e.y * VH, s = e.s * 26;
+    c.globalCompositeOperation = 'lighter'; c.globalAlpha = k * 0.9 * Math.min(1, dark * 1.5 + 0.3);
+    for (const sx of [-1, 1]) { c.drawImage(glowSprite('#ff2840'), x + sx * s * 1.6 - s, y - s, s * 2, s * 2); }
+    c.globalCompositeOperation = 'source-over'; c.globalAlpha = k * 0.85;
+    c.fillStyle = '#ff5060'; for (const sx of [-1, 1]) { c.beginPath(); c.ellipse(x + sx * s * 1.6, y, s * 0.8, s * 0.22 * (0.4 + k * 0.6), sx * 0.15, 0, Math.PI * 2); c.fill(); }
+    c.globalAlpha = 1;
+  }
+  // 화면 가장자리를 스치는 그림자
+  if (atmo.shadow) {
+    const sh = atmo.shadow, k = sh.t / 3, x = sh.dir > 0 ? lerp(-200, VW + 200, k) : lerp(VW + 200, -200, k), y = sh.y * VH;
+    c.globalAlpha = 0.55 * Math.sin(k * Math.PI); c.fillStyle = '#05040a';
+    c.beginPath(); c.ellipse(x, y, 60, 140, 0, 0, Math.PI * 2); c.fill(); circle(c, x, y - 150, 45); c.fill();
+    c.fillStyle = '#ff2840'; circle(c, x - 14, y - 152, 4); c.fill(); circle(c, x + 14, y - 152, 4); c.fill();
+    c.globalAlpha = 1;
+  }
+  c.restore();
+}
+// 전체 분위기 그리기 (월드 위, HUD 아래)
+function drawAtmosphere(dt) {
+  if (state !== 'play') return;
+  const dark = sceneDarkness();
+  if (dark > 0.02) drawNightMask(dark);
+  if (dark > 0.15) drawDarkGlows(dark);
+  drawWeather(dt, dark);
+  updateAmbientLoops();
+}
+// 끊기지 않는 바람 소리 · 밤의 낮은 울림
+function updateAmbientLoops() {
+  const ac = Snd.ac;
+  if (!ac || !Snd.noiseBuf) return;
+  if (!Snd.wind) {
+    const src = ac.createBufferSource(); src.buffer = Snd.noiseBuf; src.loop = true;
+    const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 500; f.Q.value = 1.2;
+    const g = ac.createGain(); g.gain.value = 0.0001;
+    src.connect(f); f.connect(g); g.connect(Snd.sfxBus); src.start();
+    const o1 = ac.createOscillator(), o2 = ac.createOscillator(), lp = ac.createBiquadFilter(), g2 = ac.createGain();
+    o1.type = 'sawtooth'; o1.frequency.value = 55; o2.type = 'sawtooth'; o2.frequency.value = 82.4; o2.detune.value = 8;
+    lp.type = 'lowpass'; lp.frequency.value = 260; g2.gain.value = 0.0001;
+    o1.connect(lp); o2.connect(lp); lp.connect(g2); g2.connect(Snd.sfxBus); o1.start(); o2.start();
+    Snd.wind = { f, g, g2 };
+  }
+  const W = Snd.wind, now = ac.currentTime, live = state === 'play' && !paused && !shopUI;
+  const gust = 0.6 + 0.4 * Math.sin(gtime * 0.7) * Math.sin(gtime * 0.23 + 1);
+  const wv = !live ? 0 : atmo.wx === 'blizzard' ? 0.2 * gust : atmo.wx === 'thunder' ? 0.09 * gust : atmo.wx === 'snow' ? 0.035 * gust : atmo.wx === 'fog' ? 0.025 : 0.012 * gust;
+  W.g.gain.setTargetAtTime(Math.max(0.0001, wv), now, 0.5);
+  W.f.frequency.setTargetAtTime(atmo.wx === 'blizzard' ? 500 + 700 * gust : 380 + 300 * gust, now, 0.4);
+  W.g2.gain.setTargetAtTime(live && !DIFF.calm ? Math.max(0.0001, 0.035 * nightK()) : 0.0001, now, 1.2);
+}
+
 // ---------- 업적 ----------
 const ACHS = [
   ['first',   '🗡', '첫 걸음',              '어둠을 처음 물리치기',        p => p.kills >= 1],
@@ -2607,7 +2865,7 @@ function drawBossBanner() {
 }
 
 function gainXp(p, n) {
-  n *= (1 + Math.min(1, (p.combo || 0) * 0.02)) * (worldEv && worldEv.id === 'gold' ? 2 : 1);   // 콤보·황금 눈 보너스
+  n *= (1 + Math.min(1, (p.combo || 0) * 0.02)) * (worldEv && worldEv.id === 'gold' ? 2 : 1) * (isNight() && !DIFF.calm ? 1.25 : 1);   // 콤보·황금 눈 보너스
   p.xp += n;
   while (p.xp >= p.xpNext) {
     p.xp -= p.xpNext; p.level++; p.xpNext = Math.round(12 + p.level * 9);
@@ -2635,7 +2893,8 @@ function makeEnemy(type, x, y, zone, kind = 'mob') {
     seed: Math.random() * 10, hitCd: 0, flash: 0, slowT: 0, atk: rand(0.8, 2.2), blinkT: rand(2, 4), alpha: 1, uid: ++uidSeq,
   };
   if (kind === 'elite') { e.hp *= 8; e.r *= 1.8; e.dmg *= 1.4; e.spd *= 0.85; e.xp *= 6; e.name = '정예 ' + d.name; }
-  e.hp *= DIFF.hp * (1 + 0.1 * darkLevel); e.dmg *= DIFF.dmg * (1 + 0.08 * darkLevel);   // 난이도 + 짙어진 어둠
+  e.hp *= DIFF.hp * (1 + 0.1 * darkLevel); e.dmg *= DIFF.dmg * (1 + 0.08 * darkLevel);
+  if (isNight() && !DIFF.calm) e.dmg *= 1.2;                // 밤의 어둠은 더 아파요   // 난이도 + 짙어진 어둠
   e.maxHp = e.hp;
   if (DIFF.scaleLv && players.length) { const lv = Math.max(0, partyLevel() - 1); e.hp *= 1 + DIFF.scaleLv * 0.6 * lv * (kind === 'elite' ? 1.6 : 1); e.dmg *= 1 + DIFF.scaleLv * 0.4 * lv; e.maxHp = e.hp; }
   return e;
@@ -3330,6 +3589,7 @@ function startGame(opts) {
   darkLevel = 0; darkT = 0; hordeT = DIFF.horde;
   worldEv = null; worldEvT = 100 * DIFF.ev; sleighs = []; bossSeen = {}; bossBanner = null; achFlags = {}; achPop = []; hudCombo = 0;
   shopUI = null; iris = null; shopArm = true; shopHint = false;
+  Object.assign(atmo, { day: 20, wx: 'clear', wxT: 60, wxDur: 60, bolts: [], lightT: 0, strikeT: 3, horrorT: 25, eyes: [], shadow: null, told: {} });
   finalStarted = false; finalBoss = null; endingT = 0; treeLight = 0; barrierMsgT = 0; barrierBreak = 0;
   Object.assign(tut, { step: 0, moved: 0, shots: 0, kills: 0, dashed: 0, gifts: 0, done: false });
   if (multi) Object.assign(tut, { step: 5, done: true });       // 친구들과 할 땐 튜토리얼은 건너뛰어요
@@ -3413,7 +3673,7 @@ function spawner(dt) {
     spawnT = 0.45;
     for (const p of alivePlayers()) {
       const z = zoneAt(p.x, p.y);
-      let cap = Math.round(ZONE_CAP[z - 1] * DIFF.cap);
+      let cap = Math.round(ZONE_CAP[z - 1] * DIFF.cap * (isNight() && !DIFF.calm ? 1.3 : 1));   // 밤엔 더 많이
       if (!tut.done && tut.step <= 2) cap = 5;
       if (finalStarted) cap = 6;
       let n = 0;
@@ -3950,6 +4210,7 @@ function update(dt) {
   barrierMsgT -= dt;
   for (const p of players) updatePlayer(p, dt);
   updatePetAttacks(dt);
+  updateAtmosphere(dt);
   spawner(dt);
   checkTutorial();
   checkFinal();
@@ -4036,6 +4297,10 @@ function update(dt) {
     }
     if (h.t >= h.delay) {
       h.dead = true;
+      if (h.bolt) {                                      // ⚡ 번개! 근처의 적도 맞아요
+        rec(['W', Math.round(h.x), Math.round(h.y)]); lightningStrike(h.x, h.y);
+        for (const e of enemies) if (!e.dead && e.kind !== 'core' && dist(h.x, h.y, e.x, e.y) < h.r + e.r) damageEnemy(e, h.dmg * 3, null);
+      }
       burst(h.x, h.y, h.color, 18, 260);
       if (h.after) hazards.push({ x: h.x, y: h.y, r: h.r * 0.9, t: 0, dur: 3.5, team: 'pool', dmg: h.dmg * 0.3, tick: 0.5, color: h.after });
       shock(h.x, h.y, h.color, h.r * 1.2, 0.35, 5); glowPuff(h.x, h.y, h.color, h.r * 0.8, 0.22);
@@ -4317,6 +4582,14 @@ function bell(f, vol, delay = 0) {
 }
 const SFXS = {
 
+  // ----- 날씨 & 밤의 공포 -----
+  thunder_near: v => { noise(0.18, { ft: 'highpass', f: 2500, vol: 0.5 * v }); tone(90, 0.25, { type: 'square', lp: 900, vol: 0.2 * v }); noise(2.8, { f: 500, fto: 40, vol: 0.65 * v, attack: 0.02, delay: 0.05 }); },
+  whisper: v => { for (let i = 0; i < 5; i++) noise(0.35, { ft: 'bandpass', f: rand(900, 2600), fto: rand(600, 1800), q: 8, attack: 0.12, vol: 0.12 * v, delay: i * 0.22 }); },
+  creak: v => { tone(140, 0.9, { type: 'sawtooth', to: 95, lp: 700, vib: 14, vol: 0.06 * v }); tone(210, 0.5, { type: 'sawtooth', to: 160, lp: 900, vib: 20, vol: 0.04 * v, delay: 0.6 }); },
+  howl: v => { tone(380, 2.4, { type: 'sine', to: 640, slide: 0.9, vib: 5, attack: 0.4, vol: 0.06 * v }); tone(640, 1.4, { type: 'sine', to: 420, vib: 6, vol: 0.05 * v, delay: 1.1 }); },
+  musicbox: v => { const ns = ['E6', 'C6', 'A5', 'B5', 'G#5', 'E5']; ns.forEach((n, i) => { tone(noteFreq(n) * 0.995, 1.2, { type: 'sine', vol: 0.05 * v, delay: i * 0.42 }); tone(noteFreq(n) * 2.01, 0.6, { type: 'sine', vol: 0.015 * v, delay: i * 0.42 }); }); },
+  bell_toll: v => { for (let i = 0; i < 3; i++) { tone(110, 3, { type: 'sine', vol: 0.12 * v, delay: i * 1.6 }); tone(110 * 2.76, 1.6, { type: 'sine', vol: 0.04 * v, delay: i * 1.6 }); } },
+
   // ----- 엔딩 (웅장하게) -----
   end_swell: v => { for (const n of ['C3', 'G3', 'C4', 'E4', 'G4', 'C5']) tone(noteFreq(n), 3.5, { type: 'sawtooth', lp: 1800, attack: 1.6, vib: 5, vol: 0.03 * v }); for (let i = 0; i < 16; i++) tone(70, 0.2, { type: 'sine', to: 60, vol: (0.08 + i * 0.015) * v, delay: 1.6 + i * 0.09 }); tone(65, 1.6, { type: 'sine', to: 45, vol: 0.4 * v, delay: 3.1 }); noise(2.6, { ft: 'highpass', f: 5000, attack: 2.2, vol: 0.1 * v, delay: 0.6 }); },
   end_wave: v => { noise(1.4, { ft: 'bandpass', f: 600, fto: 3000, q: 1.5, attack: 0.2, vol: 0.2 * v }); for (const n of ['C5', 'E5', 'G5', 'C6', 'E6', 'G6']) bell(noteFreq(n), 0.05 * v, 0.1); tone(98, 1.5, { type: 'sine', to: 49, vol: 0.3 * v }); },
@@ -4507,6 +4780,11 @@ TRACKS.cine = { bpm: 60, voices: [              // 엔딩: 웅장한 오케스�
   { inst: 'timp', notes: rep(seq('C2:2 C2:1 C2:.5 C2:.5 A1:4 F1:2 F1:2 G1:1 G1:1 G1:1 G1:1'), 4) },
   { inst: 'bells', notes: rep(seq('X:2'), 32) },
 ] };
+TRACKS.night = { bpm: 62, voices: [            // 밤: 으스스한 오르골 (단조)
+  { inst: 'box', notes: seq('A4:2 C5:1 E5:1 D5:2 C5:1 B4:1 A4:3 -:1 E5:2 F5:1 E5:1 D5:2 C5:1 B4:1 G#4:3 -:1 A4:2 C5:1 E5:1 A5:2 G5:1 F5:1 E5:2 D5:2 C5:1 B4:1 A4:4 -:2') },
+  { inst: 'pad', notes: seq('A3+C4+E4:8 D3+F3+A3:4 E3+G#3+B3:4 A3+C4+E4:8 F3+A3+C4:4 E3+G#3+B3:4 A3+C4+E4:6') },
+  { inst: 'bass', notes: seq('A1:8 D2:4 E2:4 A1:8 F1:4 E2:4 A1:6') },
+] };
 TRACKS.calm = { bpm: 64, voices: TRACKS.lobby.voices };        // 힐링 모드: 느린 「Silent Night」 오르골
 TRACKS.thrill = { bpm: 192, voices: TRACKS.explore.voices };    // 스릴 모드: 빠른 징글벨
 TRACKS.final = { bpm: 172, voices: TRACKS.boss.voices.map(v => v.inst === 'brass' ? { inst: 'lead', notes: v.notes } : v).concat([{ inst: 'brass', notes: rep(seq('A3:4 F3:4 G3:4 E3:4'), 2) }]) };
@@ -4534,6 +4812,7 @@ function pickMusic() {
   if (!local) return 'explore';
   if (shopUI && shopUI.phase !== 'enter') return 'shop';
   for (const e of enemies) if (e.kind === 'boss' && e.awake && !e.dead && dist(e.x, e.y, local.x, local.y) < 1300) return e.id === 'lord' ? 'final' : 'boss';
+  if (!DIFF.calm && local && isNight()) return 'night';
   return DIFF.calm ? 'calm' : DIFF.id === 'thrill' ? 'thrill' : 'explore';
 }
 function musicUpdate() {
@@ -4628,6 +4907,7 @@ function playEvent(e) {
     case 'L': pillar(x, y, a, b, d, f, e[7]); break;
     case 'Y': launchSleigh(a, b); break;
     case 'G': onGachaResult(a); break;
+    case 'W': lightningStrike(x, y); break;
     case 'F': flashScreen(a, b, x === null ? undefined : x, y === null ? undefined : y); break;
     case 'h': hitStop(a); break;
     case 'T': toast(a, b); break;
@@ -4839,7 +5119,7 @@ function hostSend(dt) {
   Net.giftSig = gsig;
   const common = {
     t: 's', rt: +runTime.toFixed(2), st: state, et: +endingT.toFixed(2), sh: teamShards, fs: finalStarted ? 1 : 0,
-    bd: Object.keys(bossDefeated), sk: +shake.toFixed(1), wev: worldEv ? [worldEv.id, +worldEv.t.toFixed(1), worldEv.dur] : 0,
+    bd: Object.keys(bossDefeated), sk: +shake.toFixed(1), wev: worldEv ? [worldEv.id, +worldEv.t.toFixed(1), worldEv.dur] : 0, dn: +atmo.day.toFixed(1), wx: atmo.wx,
     P: players.map(q => [q.id, Math.round(q.x), Math.round(q.y), +q.aim.toFixed(2), q.dead ? 1 : 0, Math.round(q.hp), q.maxHp, q.level, q.moving ? 1 : 0, q.invuln > 0 ? 1 : 0, LOOKS.indexOf(q.look), q.name, +q.walk.toFixed(2), q.weapons[q.wIdx] ? q.weapons[q.wIdx].type : 'cane', q.pet || '', q.inShop ? 1 : 0]),
     S: scrolls.filter(s => !s.taken).map(s => [Math.round(s.x), Math.round(s.y), s.skill]),
     A: allies.map(a => [a.type, Math.round(a.x), Math.round(a.y), +(a.a || 0).toFixed(2), +a.t.toFixed(2)]),
@@ -4957,7 +5237,8 @@ function clientLobbyTick(dt) {
 function clientSnap(d) {
   Net.lastSnap = performance.now();
   runTime = d.rt; teamShards = d.sh;
-  worldEv = d.wev ? { id: d.wev[0], t: d.wev[1], dur: d.wev[2] } : null; shake = Math.max(shake, (d.sk || 0) * 0.6);
+  worldEv = d.wev ? { id: d.wev[0], t: d.wev[1], dur: d.wev[2] } : null;
+  if (d.dn !== undefined) { atmo.day = d.dn; atmo.wx = d.wx || 'clear'; } shake = Math.max(shake, (d.sk || 0) * 0.6);
   if (d.fs && !finalStarted) barrierBreak = 1.2;
   finalStarted = !!d.fs;
   for (const k in bossDefeated) delete bossDefeated[k];
@@ -6597,6 +6878,15 @@ function drawHUDInner() {
   }
   c.font = '17px sans-serif'; c.fillText(DIFF.icon, VW / 2 - 106, 80);
   if (darkLevel) { c.font = FONT(15); c.fillStyle = '#6a3a8c'; c.fillText('🌑' + darkLevel, VW / 2 + 104, 80); }
+  {                                                       // 낮/밤 · 날씨
+    const nt = isNight(), px = VW / 2 + 134;
+    paperPanel(c, px, 22, 128, 34, 14, nt ? '#2c2a4a' : '#fff6e2');
+    const k = (atmo.day % DAY_LEN) / DAY_LEN;
+    c.strokeStyle = nt ? '#9fb4ff' : '#e8a93a'; c.lineWidth = 3; c.beginPath(); c.arc(px + 20, 39, 10, -Math.PI / 2, -Math.PI / 2 + k * Math.PI * 2); c.stroke();
+    c.font = '14px sans-serif'; c.textAlign = 'center'; c.fillText(nt ? '🌙' : '☀️', px + 20, 44);
+    c.font = FONT(16); c.fillStyle = nt ? '#e6e8ff' : UI.ink; c.textAlign = 'left'; c.fillText(dayPhaseName() + ' ' + (atmo.wx === 'clear' && nt ? '🌌' : WEATHERS[atmo.wx].icon), px + 38, 45);
+    c.textAlign = 'center';
+  }
 
   // 보스 체력바 (어두운 밤하늘 카드)
   let boss = null, bd = 1e9;
@@ -7110,6 +7400,7 @@ function frameBody(dt) {
     drawWorld();
     drawSnow(paused ? 0 : dt, 0.7);
     ctx.save(); ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = '#f7e6cb'; ctx.fillRect(0, 0, VW, VH); ctx.restore();
+    if (state === 'play') { updateHorror(dt); drawAtmosphere(dt); }
     if (screenFlashA > 0) { ctx.globalAlpha = Math.min(1, screenFlashA); ctx.fillStyle = screenFlashColor; ctx.fillRect(0, 0, VW, VH); ctx.globalAlpha = 1; }
     if (worldEv && state === 'play') drawWeatherFx();
     if (state === 'ending' || state === 'win') drawCinematic();
