@@ -2072,7 +2072,7 @@ function updateShopUI(dt) {
       u.res = { t: 0, miss: P.miss, pet: P.miss ? null : PET[P.result.replace('+', '')], dup: P.result.endsWith('+') };
       if (P.miss) sfxLocal('hurt');
       else {
-        sfxLocal('reveal' + u.res.pet.r); setTimeout(() => sfxLocal('pet_' + u.res.pet.id), 450);
+        const rp = u.res.pet; sfxLocal('reveal' + rp.r); setTimeout(() => sfxLocal('pet_' + rp.id), 450);
         const n = 30 + u.res.pet.r * 25, cols = ['#ff5a67', '#ffd166', '#5cc2f0', '#7dffa8', '#c77dff', '#ffffff'];
         u.conf = []; for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, sp = rand(200, 520); u.conf.push({ x: 500, y: 320, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 200, rot: Math.random() * 6, col: pick(cols), life: rand(1.4, 2.4) }); }
       }
@@ -2641,7 +2641,7 @@ function drawNightMask(dark) {
   if (nightCv.width !== w || nightCv.height !== h) { nightCv.width = w; nightCv.height = h; }
   const n = nctx, lights = gatherLights();
   n.globalCompositeOperation = 'source-over'; n.clearRect(0, 0, w, h);
-  n.fillStyle = atmo.wx === 'fog' && nightK() < 0.5 ? 'rgba(40,48,58,' + dark + ')' : 'rgba(5,7,20,' + dark + ')';
+  n.fillStyle = atmo.wx === 'fog' && nightK() < 0.5 ? 'rgba(40,48,58,' + dark + ')' : REAL.on ? 'rgba(4,8,26,' + dark + ')' : 'rgba(5,7,20,' + dark + ')';
   n.fillRect(0, 0, w, h);
   n.globalCompositeOperation = 'destination-out';
   for (const [x0, y0, r0, a] of lights) {
@@ -2654,7 +2654,7 @@ function drawNightMask(dark) {
   ctx.drawImage(nightCv, 0, 0, VW, VH);
   // 따뜻한 불빛 색 (덧칠)
   if (fxLow) return;
-  ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.18 * Math.min(1, dark * 1.4);
+  ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = (REAL.on ? 0.32 : 0.18) * Math.min(1, dark * 1.4);
   let n2 = 0;
   for (const [x0, y0, r0, , col] of lights) {
     if (!col || r0 > 420 || n2 > 10) continue;
@@ -2695,6 +2695,7 @@ function drawWeather(dt, dark) {
   const c = ctx, wx = atmo.wx, bio = local ? biomeAt(local.x, local.y).id : 'snow';
   const sand = bio === 'desert', ash = bio === 'volcano';
   c.save();
+  if (REAL.on) drawRealWeather(dt, wx, bio); else {
   if (wx === 'snow' || wx === 'blizzard' || wx === 'thunder') {
     const heavy = wx === 'blizzard', n = heavy ? 160 : wx === 'thunder' ? 110 : 70, ang = heavy ? 0.9 : wx === 'thunder' ? 0.35 : 0.2;
     c.strokeStyle = sand ? 'rgba(232,190,120,0.75)' : ash ? 'rgba(120,110,110,0.7)' : wx === 'thunder' ? 'rgba(190,210,255,0.55)' : 'rgba(255,255,255,0.8)';
@@ -2713,6 +2714,7 @@ function drawWeather(dt, dark) {
       const g = c.createRadialGradient(x, y, 10, x, y, R); g.addColorStop(0, 'rgba(' + col + ',' + (wx === 'fog' ? 0.32 : 0.28) + ')'); g.addColorStop(1, 'rgba(' + col + ',0)');
       c.fillStyle = g; c.fillRect(x - R, y - R, R * 2, R * 2);
     }
+  }
   }
   if (wx === 'thunder') {                                   // 먹구름 그림자
     const g = c.createLinearGradient(0, 0, 0, VH * 0.35); g.addColorStop(0, 'rgba(20,22,40,0.45)'); g.addColorStop(1, 'rgba(20,22,40,0)');
@@ -2749,8 +2751,10 @@ function drawWeather(dt, dark) {
 // 전체 분위기 그리기 (월드 위, HUD 아래)
 function drawAtmosphere(dt) {
   if (state !== 'play') return;
-  const dark = sceneDarkness();
+  const dark = sceneDarkness(), nk = nightK();
+  if (REAL.on) { if (atmo.wx === 'clear' || atmo.wx === 'snow') drawCloudShadows(nk); drawMoonlight(nk); }
   if (dark > 0.02) drawNightMask(dark);
+  if (REAL.on) { drawNightSparkles(nk); drawAurora(nk); }
   if (dark > 0.15) drawDarkGlows(dark);
   drawWeather(dt, dark);
   updateAmbientLoops();
@@ -5819,6 +5823,7 @@ addEventListener('orientationchange', () => setTimeout(() => { resize(); autoSto
 //  그리기 — 캐릭터
 // =====================================================================
 function drawElf(c, x, y, L, face, walk, moving, s = 1, alpha = 1) {
+  if (REAL.on && !fxLite) { drawRealElf(c, x, y, L, face, walk, moving, s, alpha); return; }
   c.save();
   c.translate(x, y); c.scale(s * face, s); c.globalAlpha = alpha;
   const sw = moving ? Math.sin(walk * 14) : 0;
@@ -5862,8 +5867,10 @@ function drawElf(c, x, y, L, face, walk, moving, s = 1, alpha = 1) {
   c.fillStyle = '#ffffff';
   rr(c, -11, -19, 22, 5, 2.5); c.fill();
   circle(c, -18, -36, 3.6); c.fill();
-  // 장신구
-  const acc = L.acc;
+  drawElfAcc(c, L.acc);
+  c.restore();
+}
+function drawElfAcc(c, acc) {
   if (acc === 'bell') { c.fillStyle = '#ffd166'; circle(c, 0, -3, 3); c.fill(); c.fillStyle = '#b8860b'; circle(c, 0, -2, 1); c.fill(); }
   if (acc === 'scarf') { c.fillStyle = '#e63946'; rr(c, -9, -6, 18, 4, 2); c.fill(); c.fillStyle = '#fff'; c.fillRect(-6, -6, 2, 4); c.fillRect(0, -6, 2, 4); c.fillStyle = '#e63946'; c.fillRect(-9, -4, 4, 9); }
   if (acc === 'earmuff') { c.fillStyle = '#ff9ecd'; circle(c, -8, -12, 4); c.fill(); circle(c, 8, -12, 4); c.fill(); }
@@ -5878,7 +5885,6 @@ function drawElf(c, x, y, L, face, walk, moving, s = 1, alpha = 1) {
   if (acc === 'bow') { c.fillStyle = '#ff4d6d'; c.beginPath(); c.moveTo(0, -4); c.lineTo(-6, -8); c.lineTo(-6, 0); c.closePath(); c.moveTo(0, -4); c.lineTo(6, -8); c.lineTo(6, 0); c.closePath(); c.fill(); }
   if (acc === 'holly') { c.fillStyle = '#1b7f3b'; c.beginPath(); c.ellipse(-3, -19, 4, 2, -0.4, 0, Math.PI * 2); c.ellipse(4, -19, 4, 2, 0.4, 0, Math.PI * 2); c.fill(); c.fillStyle = '#e63946'; circle(c, 0.5, -19, 1.8); c.fill(); }
   if (acc === 'crown') { c.fillStyle = '#ffd166'; c.beginPath(); c.moveTo(-6, -19); c.lineTo(-6, -25); c.lineTo(-3, -22); c.lineTo(0, -26); c.lineTo(3, -22); c.lineTo(6, -25); c.lineTo(6, -19); c.closePath(); c.fill(); }
-  c.restore();
 }
 function drawStar(c, x, y, R, r, color) {
   c.fillStyle = color;
@@ -5973,8 +5979,12 @@ function drawSlime(e) {
   }
   if (e.type === 'splitter') { c.strokeStyle = 'rgba(255,184,77,0.5)'; c.lineWidth = 2; c.beginPath(); c.moveTo(0, -ry * 1.15); c.lineTo(0, r * 0.75); c.stroke(); }
   if (T.acc) drawAcc(c, T.acc, r, ry, e.color);
-  c.fillStyle = 'rgba(255,255,255,0.18)';
+  c.fillStyle = REAL.on ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.18)';
   c.beginPath(); c.ellipse(-r * 0.35, -r * 0.55, r * 0.25, r * 0.14, -0.5, 0, Math.PI * 2); c.fill();
+  if (REAL.on) {                                          // 젤리처럼 반짝이는 점 + 아래쪽 투명한 빛
+    c.fillStyle = 'rgba(255,255,255,0.85)'; c.beginPath(); c.arc(-r * 0.12, -r * 0.62, r * 0.07, 0, Math.PI * 2); c.fill();
+    c.fillStyle = 'rgba(255,255,255,0.12)'; c.beginPath(); c.ellipse(r * 0.1, r * 0.45, r * 0.55, r * 0.16, 0, 0, Math.PI * 2); c.fill();
+  }
   // 눈
   const tgt = nearestPlayer(e.x, e.y);
   const la = tgt ? Math.atan2(tgt.y - e.y, tgt.x - e.x) : 0;
@@ -7161,6 +7171,285 @@ function postFX(dt, mode) {
   c.restore();
 }
 
+// =====================================================================
+//  리얼 그래픽 2: 위성 지도 · 구름 그림자 · 달빛 밤 · 오로라 · 실감 날씨 · 실사풍 엘프
+// =====================================================================
+// ---------- 부드러운 노이즈 (끝이 이어지는 구름 질감) ----------
+function tileNoise(S, cells, oct, seed) {
+  const R = mulberry32(seed), out = new Float32Array(S * S);
+  let amp = 1, tot = 0;
+  for (let o = 0; o < oct; o++) {
+    const n = cells << o, grid = new Float32Array(n * n);
+    for (let i = 0; i < grid.length; i++) grid[i] = R();
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const fx = x / S * n, fy = y / S * n, ix = Math.floor(fx), iy = Math.floor(fy), tx = fx - ix, ty = fy - iy;
+      const sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+      const a = grid[(iy % n) * n + ix % n], b = grid[(iy % n) * n + (ix + 1) % n], c = grid[((iy + 1) % n) * n + ix % n], d = grid[((iy + 1) % n) * n + (ix + 1) % n];
+      out[y * S + x] += (a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy) * amp;
+    }
+    tot += amp; amp *= 0.5;
+  }
+  for (let i = 0; i < out.length; i++) out[i] /= tot;
+  return out;
+}
+const CLOUD = {};
+function cloudTex(kind) {                                  // 'shadow' 구름 그림자 · 'fog' 안개 · 'storm' 먹구름
+  if (CLOUD[kind]) return CLOUD[kind];
+  const S = 256, nz = tileNoise(S, 4, 4, kind.length * 101 + 7), cv = makeCanvas(S, S), g = cv.getContext('2d'), id = g.createImageData(S, S), d = id.data;
+  const col = kind === 'fog' ? [205, 214, 222] : kind === 'storm' ? [14, 16, 28] : [10, 18, 40];
+  const lo = kind === 'fog' ? 0.38 : kind === 'storm' ? 0.42 : 0.52, hi = kind === 'fog' ? 0.75 : 0.7;
+  for (let i = 0; i < S * S; i++) {
+    const v = clamp((nz[i] - lo) / (hi - lo), 0, 1), a = v * v * (3 - 2 * v);
+    d[i * 4] = col[0]; d[i * 4 + 1] = col[1]; d[i * 4 + 2] = col[2]; d[i * 4 + 3] = a * 255;
+  }
+  g.putImageData(id, 0, 0);
+  return (CLOUD[kind] = cv);
+}
+// 화면을 덮는 구름 질감 (월드 좌표에 고정 + 바람에 흘러가요)
+function drawCloudLayer(kind, alpha, scale, speed, par) {
+  const c = ctx, T = cloudTex(kind), S = T.width * scale;
+  const ox = ((cam.x * par + gtime * speed) % S + S) % S, oy = ((cam.y * par + gtime * speed * 0.35) % S + S) % S;
+  if (!T.pat) T.pat = c.createPattern(T, 'repeat');
+  c.save(); c.globalAlpha = alpha; c.translate(-ox, -oy); c.scale(scale, scale);
+  c.fillStyle = T.pat; c.fillRect(0, 0, (VW + S) / scale, (VH + S) / scale);
+  c.restore();
+}
+
+// ---------- 위성사진 같은 미니맵 ----------
+let SAT = null;
+function satelliteMap(size) {
+  if (SAT && SAT.size === size && SAT.n === decor.length) return SAT.cv;
+  const N = 240, cv = makeCanvas(N, N), g = cv.getContext('2d'), id = g.createImageData(N, N), d = id.data;
+  const hgt = tileNoise(N, 6, 4, 991), k = W / N;
+  const avg = BIOMES.map(b => hexRGB(b.ground)), satCol = {
+    snow: [226, 234, 244], ice: [178, 214, 232], volcano: [62, 48, 44], desert: [222, 196, 142], jungle: [70, 120, 52], swamp: [92, 104, 70],
+  };
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const wx = (x + 0.5) * k, wy = (y + 0.5) * k, b = BIOMES[biomeIdx(wx, wy)], base = satCol[b.id] || avg[0];
+    const i = y * N + x, h = hgt[i], hx = hgt[y * N + (x + 1) % N] - hgt[i], hy = hgt[((y + 1) % N) * N + x] - hgt[i];
+    const shade = 1 + (-hx - hy) * 9 + (h - 0.5) * 0.35;                // 왼쪽 위에서 비친 산그늘
+    const dd = Math.hypot(wx - CX, wy - CY), corrupt = dd > ZONE_EDGE[2] ? 0 : 0;
+    for (let ch = 0; ch < 3; ch++) d[i * 4 + ch] = clamp(base[ch] * shade - corrupt, 0, 255);
+    d[i * 4 + 3] = 255;
+  }
+  g.putImageData(id, 0, 0);
+  // 숲·마을·용암 같은 지형지물
+  for (const q of decor) {
+    const x = q.x / k, y = q.y / k;
+    if (q.t === 'pine' || q.t === 'bluepine' || q.t === 'palm' || q.t === 'jtree' || q.t === 'bush' || q.t === 'deadtree') { g.fillStyle = q.t === 'deadtree' ? 'rgba(30,20,16,0.6)' : 'rgba(16,52,30,0.55)'; g.fillRect(x - 0.7, y - 0.7, 1.5, 1.5); }
+    else if (q.t === 'mud' || q.t === 'lily' || q.t === 'reeds') { g.fillStyle = 'rgba(40,60,50,0.6)'; g.beginPath(); g.arc(x, y, 1.5, 0, 6.3); g.fill(); }
+    else if (q.t === 'iceberg' || q.t === 'crystal') { g.fillStyle = 'rgba(235,250,255,0.85)'; g.fillRect(x - 1, y - 1, 2, 2); }
+    else if (q.t === 'rock' || q.t === 'vrock' || q.t === 'ruin') { g.fillStyle = 'rgba(70,64,60,0.6)'; g.fillRect(x - 0.6, y - 0.6, 1.3, 1.3); }
+    else if (q.t === 'house') { g.fillStyle = '#c4703a'; g.fillRect(x - 1, y - 1, 2.2, 2.2); }
+    else if (q.t === 'lava' || q.t === 'vent') { g.fillStyle = 'rgba(255,110,40,0.9)'; g.beginPath(); g.arc(x, y, 1.6 * (q.s || 1), 0, 6.3); g.fill(); }
+    else if (q.t === 'pond') { g.fillStyle = 'rgba(90,150,190,0.8)'; g.beginPath(); g.arc(x, y, 2, 0, 6.3); g.fill(); }
+  }
+  // 어둠에 물든 안쪽 구역
+  for (let i = 0; i < 3; i++) {
+    const gr = g.createRadialGradient(CX / k, CY / k, ZONE_EDGE[i] / k * 0.6, CX / k, CY / k, ZONE_EDGE[i] / k);
+    gr.addColorStop(0, 'rgba(60,20,90,' + (0.05 + i * 0.05) + ')'); gr.addColorStop(1, 'rgba(60,20,90,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, N, N);
+  }
+  // 구름 조금
+  g.globalAlpha = 0.35; g.drawImage(cloudTex('fog'), 0, 0, N, N); g.globalAlpha = 1;
+  SAT = { cv, size, n: decor.length };
+  return cv;
+}
+
+// ---------- 밤: 달빛 색 + 오로라 ----------
+function drawMoonlight(nk) {
+  if (nk < 0.05) return;
+  const c = ctx;
+  c.save();
+  c.globalCompositeOperation = 'multiply'; c.globalAlpha = Math.min(1, nk * 1.1);
+  c.fillStyle = '#7f92c8'; c.fillRect(0, 0, VW, VH);                     // 푸른 달빛으로 색이 가라앉아요
+  c.restore();
+}
+function drawAurora(nk) {
+  const bio = local ? biomeAt(local.x, local.y).id : 'snow';
+  if (nk < 0.4 || fxLow || !(atmo.wx === 'clear' || atmo.wx === 'snow') || !(bio === 'snow' || bio === 'ice')) return;
+  const k = (nk - 0.4) / 0.6, aw = Math.ceil(VW / 8), ah = Math.ceil(VH / 8);
+  if (!PFX.aur || PFX.aur.width !== aw || PFX.aur.height !== ah) PFX.aur = makeCanvas(aw, ah);
+  const c = PFX.aur.getContext('2d');
+  c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, aw, ah); c.scale(1 / 8, 1 / 8);
+  c.save(); c.globalCompositeOperation = 'lighter';
+  for (let band = 0; band < 3; band++) {
+    const col = band === 1 ? [140, 90, 255] : [60, 255, 170];
+    const baseY = VH * (0.08 + band * 0.09);
+    for (let x = -40; x < VW + 40; x += 18) {
+      const t = gtime * 0.25 + band * 2;
+      const y = baseY + Math.sin(x * 0.006 + t) * 40 + Math.sin(x * 0.017 - t * 1.7) * 14;
+      const h = 90 + Math.sin(x * 0.011 + t * 1.3) * 50;
+      const a = (0.05 + 0.04 * Math.sin(x * 0.02 + t * 3)) * k * (band === 1 ? 0.6 : 1);
+      const gr = c.createLinearGradient(0, y, 0, y + h);
+      gr.addColorStop(0, 'rgba(' + col + ',0)'); gr.addColorStop(0.3, 'rgba(' + col + ',' + a + ')'); gr.addColorStop(1, 'rgba(' + col + ',0)');
+      c.fillStyle = gr; c.fillRect(x, y, 20, h);
+    }
+  }
+  c.restore();
+  ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.imageSmoothingEnabled = true; ctx.drawImage(PFX.aur, 0, 0, VW, VH); ctx.restore();
+}
+// 달빛에 반짝이는 눈 (밤)
+function drawNightSparkles(nk) {
+  if (nk < 0.3 || fxLow) return;
+  const c = ctx;
+  c.save(); c.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 60; i++) {
+    const h = (i * 2654435761) >>> 0, wx = (h % 2000) - cam.x * 0.0, x = ((h % 997) / 997 * VW + 0 - cam.x) % VW, y = (((h >> 10) % 991) / 991 * VH - cam.y) % VH;
+    const tw = Math.sin(gtime * 3 + i * 1.7);
+    if (tw < 0.7) continue;
+    const X = x < 0 ? x + VW : x, Y = y < 0 ? y + VH : y;
+    c.globalAlpha = (tw - 0.7) * 3 * nk; c.drawImage(glowSprite('#bcd4ff'), X - 4, Y - 4, 8, 8);
+  }
+  c.restore();
+}
+
+// ---------- 실감 날씨 ----------
+const RAIN = [];
+for (let i = 0; i < 220; i++) RAIN.push({ x: Math.random(), y: Math.random(), z: Math.random(), sp: 0 });
+const SPLASH = [];
+function drawRealWeather(dt, wx, bio) {
+  const c = ctx, sand = bio === 'desert', ash = bio === 'volcano';
+  if (wx === 'thunder') {
+    // 먹구름 그림자 + 비
+    if (!fxLow) drawCloudLayer('storm', 0.55, 3.2, 70, 0.6);
+    const n = fxLow ? 90 : 220, ang = 0.28;
+    c.save(); c.lineCap = 'round';
+    for (let i = 0; i < n; i++) {
+      const r = RAIN[i], z = r.z, len = 14 + z * 26;
+      r.y += (1.5 + z * 1.4) * dt; r.x += 0.35 * ang * dt;
+      if (r.y > 1.05) {
+        if (z > 0.55 && SPLASH.length < 60) SPLASH.push({ x: r.x * VW, y: r.y * VH - 20 - Math.random() * 200, t: 0 });
+        r.y = -0.05; r.x = Math.random();
+      }
+      const x = ((r.x % 1) + 1) % 1 * VW, y = r.y * VH;
+      c.strokeStyle = sand ? 'rgba(220,190,140,' + (0.25 + z * 0.35) + ')' : 'rgba(190,210,240,' + (0.18 + z * 0.4) + ')'; c.lineWidth = 0.8 + z * 1.2;
+      c.beginPath(); c.moveTo(x, y); c.lineTo(x - Math.sin(ang) * len, y - Math.cos(ang) * len); c.stroke();
+    }
+    for (let i = SPLASH.length - 1; i >= 0; i--) {                     // 땅에 튀는 빗방울
+      const s = SPLASH[i]; s.t += dt;
+      if (s.t > 0.35) { SPLASH.splice(i, 1); continue; }
+      const k = s.t / 0.35;
+      c.strokeStyle = 'rgba(200,220,255,' + (1 - k) * 0.6 + ')'; c.lineWidth = 1;
+      c.beginPath(); c.ellipse(s.x, s.y, 2 + k * 9, 1 + k * 3, 0, 0, Math.PI * 2); c.stroke();
+    }
+    c.restore();
+  } else if (wx === 'snow' || wx === 'blizzard') {
+    const heavy = wx === 'blizzard', spr = flakeSprite(), n = heavy ? (fxLow ? 120 : 220) : (fxLow ? 60 : 110);
+    const windX = heavy ? 2.4 : 0.25 + Math.sin(gtime * 0.3) * 0.2;
+    c.save();
+    for (let i = 0; i < n; i++) {
+      const r = RAIN[i], z = r.z;
+      r.y += (heavy ? 0.6 + z * 0.9 : 0.1 + z * 0.16) * dt; r.x += windX * (0.4 + z) * dt / 3 + Math.sin(gtime * 2 + i) * 0.0006;
+      if (r.y > 1.05) { r.y = -0.05; r.x = Math.random(); }
+      const x = ((r.x % 1) + 1) % 1 * VW, y = r.y * VH, sz = 1.2 + z * z * (heavy ? 5 : 4);
+      if (sand || ash) { c.fillStyle = sand ? 'rgba(225,190,130,0.6)' : 'rgba(110,100,100,0.65)'; c.fillRect(x, y, sz, sz); continue; }
+      c.globalAlpha = 0.45 + z * 0.5;
+      if (heavy && z > 0.6) {                                           // 바람에 늘어진 눈송이
+        c.save(); c.translate(x, y); c.rotate(-1.1); c.drawImage(spr, -sz * 3, -sz, sz * 6, sz * 2); c.restore();
+      } else c.drawImage(spr, x - sz, y - sz, sz * 2, sz * 2);
+    }
+    c.restore();
+    if (heavy && !fxLow) { drawCloudLayer('fog', sand ? 0.45 : 0.6, 2.4, 420, 1.1); drawCloudLayer('fog', 0.35, 4, 260, 0.8); }
+  }
+  if (wx === 'fog' && !fxLow) { drawCloudLayer('fog', 0.55, 3, 22, 1); drawCloudLayer('fog', 0.4, 5, 12, 0.7); }
+}
+// 맑은 낮: 땅 위를 천천히 지나가는 구름 그림자
+function drawCloudShadows(nk) {
+  if (fxLow || nk > 0.6) return;
+  drawCloudLayer('shadow', 0.22 * (1 - nk), 6, 18, 1);
+}
+
+// ---------- 실사풍인데 귀여운 엘프 ----------
+function feltGrad(c, x0, y0, x1, y1, col, k = 1) {
+  const rgb = hexRGB(col) || [200, 40, 40], g = c.createLinearGradient(x0, y0, x1, y1);
+  g.addColorStop(0, mixRGB(rgb, LIGHT_RGB, 0.32 * k)); g.addColorStop(0.5, col); g.addColorStop(1, mixRGB(rgb, SHADE_RGB, 0.5 * k));
+  return g;
+}
+function fur(c, x, y, w, h) {                                  // 복슬복슬한 흰 털 장식
+  const g = c.createLinearGradient(x, y, x, y + h);
+  g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#c9d2e2');
+  c.fillStyle = g; rr(c, x, y, w, h, h / 2); c.fill();
+  c.fillStyle = 'rgba(255,255,255,0.55)';
+  for (let i = 0; i < w / 1.7; i++) { c.beginPath(); c.arc(x + 1 + i * 1.7, y + h / 2 + Math.sin(i * 2.7) * h * 0.42, 0.9 + (i % 3) * 0.25, 0, Math.PI * 2); c.fill(); }
+}
+function drawRealElf(c, x, y, L, face, walk, moving, s, alpha) {
+  c.save();
+  c.translate(x, y); c.scale(s * face * 1.12, s * 1.12); c.globalAlpha = alpha;
+  const sw = moving ? Math.sin(walk * 14) : 0, bob = moving ? Math.abs(sw) * -2 : Math.sin(gtime * 2) * 0.6;
+  const blink = (gtime * 0.7 + x * 0.001) % 4 < 0.12;
+  // 그림자 (부드럽게)
+  let g = c.createRadialGradient(0, 18, 1, 0, 18, 14);
+  g.addColorStop(0, 'rgba(10,15,40,0.38)'); g.addColorStop(1, 'rgba(10,15,40,0)');
+  c.fillStyle = g; c.beginPath(); c.ellipse(0, 18, 14, 5, 0, 0, Math.PI * 2); c.fill();
+  // 다리 (줄무늬 스타킹) & 부츠
+  for (const [lx, d] of [[-5, 1], [4, -1]]) {
+    const ly = 8 + sw * 2 * d;
+    c.fillStyle = feltGrad(c, lx - 2, 0, lx + 3, 0, '#f2f2f4'); c.fillRect(lx - 2.3, ly, 4.6, 8);
+    c.fillStyle = '#c4262f'; c.fillRect(lx - 2.3, ly + 1.5, 4.6, 1.6); c.fillRect(lx - 2.3, ly + 4.6, 4.6, 1.6);
+    g = c.createLinearGradient(0, ly + 6, 0, ly + 11); g.addColorStop(0, '#7a4a2a'); g.addColorStop(1, '#2c170b');
+    c.fillStyle = g; c.beginPath(); c.ellipse(lx + 1, ly + 9, 4.6, 2.8, 0, 0, Math.PI * 2); c.fill();
+    c.fillStyle = 'rgba(255,230,200,0.5)'; c.beginPath(); c.ellipse(lx, ly + 8, 1.8, 0.8, -0.3, 0, Math.PI * 2); c.fill();
+  }
+  c.translate(0, bob);
+  // 몸통 (펠트 코트)
+  c.fillStyle = feltGrad(c, -12, -6, 10, 12, L.coat);
+  c.beginPath(); c.moveTo(-8, -5); c.quadraticCurveTo(-13, 4, -12.5, 11); c.quadraticCurveTo(0, 13.5, 12.5, 11); c.quadraticCurveTo(13, 4, 8, -5); c.closePath(); c.fill();
+  fur(c, -12.5, 9.5, 25, 3.6);
+  // 허리띠 + 금속 버클
+  g = c.createLinearGradient(0, 2, 0, 6); g.addColorStop(0, '#3a2414'); g.addColorStop(1, '#140a04');
+  c.fillStyle = g; c.fillRect(-11, 2.4, 22, 3.4);
+  g = c.createLinearGradient(-2, 2, 2, 7); g.addColorStop(0, '#fff3b0'); g.addColorStop(0.5, '#e8b23a'); g.addColorStop(1, '#8a5a12');
+  c.fillStyle = g; c.fillRect(-2.4, 1.8, 4.8, 4.6); c.fillStyle = '#3a2414'; c.fillRect(-1, 3.1, 2, 2);
+  // 팔 + 벙어리장갑
+  c.fillStyle = feltGrad(c, 6, -4, 12, 8, L.coat);
+  c.beginPath(); c.ellipse(9.5, 1.5, 3.2, 6.2, -0.5, 0, Math.PI * 2); c.fill();
+  c.fillStyle = feltGrad(c, 9, 4, 14, 9, '#2f7d4a'); c.beginPath(); c.arc(11.6, 6.4, 2.9, 0, Math.PI * 2); c.fill();
+  // 귀 (뾰족한 엘프 귀, 안쪽 분홍빛)
+  for (const sx of [-1, 1]) {
+    c.fillStyle = feltGrad(c, sx * 8, -16, sx * 16, -9, L.skin, 0.6);
+    c.beginPath(); c.moveTo(sx * 7.5, -14); c.quadraticCurveTo(sx * 15, -18.5, sx * 17, -19); c.quadraticCurveTo(sx * 13, -12, sx * 7.5, -9); c.closePath(); c.fill();
+    c.fillStyle = 'rgba(255,120,130,0.35)'; c.beginPath(); c.moveTo(sx * 8.5, -12.6); c.quadraticCurveTo(sx * 13, -16, sx * 14.5, -17); c.quadraticCurveTo(sx * 12, -12.5, sx * 8.5, -10.5); c.fill();
+  }
+  // 얼굴 (피부 질감 + 볼 홍조)
+  const sk = hexRGB(L.skin) || [255, 220, 190];
+  g = c.createRadialGradient(-3, -16, 1, 0, -12, 10.5);
+  g.addColorStop(0, mixRGB(sk, LIGHT_RGB, 0.35)); g.addColorStop(0.6, L.skin); g.addColorStop(1, mixRGB(sk, [120, 60, 50], 0.35));
+  c.fillStyle = g; c.beginPath(); c.arc(0, -12, 9.4, 0, Math.PI * 2); c.fill();
+  // 머리카락 (앞머리)
+  const hair = L.hair || (sk[0] + sk[1] + sk[2] < 420 ? '#1e130c' : '#8a4b22');
+  c.fillStyle = feltGrad(c, -8, -21, 8, -14, hair, 0.8);
+  c.beginPath(); c.moveTo(-9.2, -14); c.quadraticCurveTo(-6, -19.5, 0, -19.5); c.quadraticCurveTo(7, -19.5, 9.2, -14);
+  c.quadraticCurveTo(6, -16, 4.5, -14.5); c.quadraticCurveTo(2.5, -16.5, 0, -15); c.quadraticCurveTo(-3, -17, -5, -14.5); c.quadraticCurveTo(-7, -16, -9.2, -14); c.fill();
+  // 볼 홍조
+  for (const bx of [-3.2, 8]) { g = c.createRadialGradient(bx, -8, 0, bx, -8, 3.4); g.addColorStop(0, 'rgba(255,90,110,0.55)'); g.addColorStop(1, 'rgba(255,90,110,0)'); c.fillStyle = g; c.fillRect(bx - 4, -12, 8, 8); }
+  // 큰 눈 (홍채 + 반짝이는 빛)
+  for (const ex of [1.6, 6.4]) {
+    if (blink) { c.strokeStyle = '#2a1a12'; c.lineWidth = 1.1; c.beginPath(); c.arc(ex, -12.2, 1.9, 0.15, Math.PI - 0.15); c.stroke(); continue; }
+    c.fillStyle = '#ffffff'; c.beginPath(); c.ellipse(ex, -12.3, 2.1, 2.6, 0, 0, Math.PI * 2); c.fill();
+    g = c.createRadialGradient(ex, -12.8, 0.2, ex, -12, 2.2); g.addColorStop(0, '#7ec8ff'); g.addColorStop(0.55, '#2c6fb3'); g.addColorStop(1, '#0e2340');
+    c.fillStyle = g; c.beginPath(); c.ellipse(ex + 0.2, -12, 1.7, 2.2, 0, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#05070c'; c.beginPath(); c.arc(ex + 0.3, -11.8, 0.85, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#ffffff'; c.beginPath(); c.arc(ex - 0.5, -13, 0.75, 0, Math.PI * 2); c.fill();
+    c.beginPath(); c.arc(ex + 0.8, -11, 0.35, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = '#1a0f0a'; c.lineWidth = 0.7; c.beginPath(); c.arc(ex, -12.3, 2.3, Math.PI * 1.15, Math.PI * 1.85); c.stroke();
+  }
+  // 코 + 입
+  c.fillStyle = 'rgba(230,110,100,0.8)'; c.beginPath(); c.ellipse(4.4, -9.4, 1.1, 0.8, 0, 0, Math.PI * 2); c.fill();
+  c.strokeStyle = '#7a3b2e'; c.lineWidth = 0.9; c.beginPath(); c.arc(4.2, -8.1, 1.5, 0.3, Math.PI - 0.3); c.stroke();
+  // 모자 (펠트 질감 + 접힌 주름 + 털 방울)
+  const tip = Math.sin(gtime * 2 + x * 0.01) * 1.5 + (moving ? sw * 1.5 : 0);
+  c.fillStyle = feltGrad(c, -12, -36, 10, -16, L.hat);
+  c.beginPath(); c.moveTo(-10.5, -16.5); c.quadraticCurveTo(-5, -31, -18 + tip, -36); c.quadraticCurveTo(1, -32, 10.5, -16.5); c.closePath(); c.fill();
+  c.strokeStyle = 'rgba(0,0,0,0.18)'; c.lineWidth = 1; c.beginPath(); c.moveTo(-3, -18); c.quadraticCurveTo(-4, -27, -12 + tip, -33); c.stroke();
+  fur(c, -11.5, -20, 23, 5);
+  g = c.createRadialGradient(-19 + tip, -37.5, 0.5, -18 + tip, -36, 4.2); g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#bfc8da');
+  c.fillStyle = g; c.beginPath(); c.arc(-18 + tip, -36, 4, 0, Math.PI * 2); c.fill();
+  if (L.acc !== 'scarf' || true) drawElfAcc(c, L.acc);
+  c.restore();
+  return true;
+}
+
 function drawWorld() {
   const c = ctx;
   const shk = shake * DIFF.fx, sx = shk ? rand(-shk, shk) : 0, sy = shk ? rand(-shk, shk) : 0;
@@ -7594,20 +7883,24 @@ function drawHUDInner() {
   paperPanel(c, mx - 7, my - 7, m + 14, m + 14, 12);
   garland(c, mx + 4, my - 7, m - 8);
   c.save(); rr(c, mx, my, m, m, 8); c.clip();
-  c.fillStyle = '#f7efe0'; c.fillRect(mx, my, m, m);
   const mcx = mx + CX * sc, mcy = my + CY * sc;
+  if (REAL.on) c.drawImage(satelliteMap(m), mx, my, m, m);
+  else { c.fillStyle = '#f7efe0'; c.fillRect(mx, my, m, m);
   for (let i = 0; i < BIOMES.length; i++) {
     const a0 = biomeAngle(i) - Math.PI / 6 - Math.PI / 2, a1 = a0 + Math.PI / 3;
     c.fillStyle = BIOMES[i].map; c.beginPath(); c.moveTo(mcx, mcy); c.arc(mcx, mcy, m, a0, a1); c.closePath(); c.fill();
   }
-  c.fillStyle = BIOMES[0].map; circle(c, mcx, mcy, SNOW_CORE * sc); c.fill();
+  c.fillStyle = BIOMES[0].map; circle(c, mcx, mcy, SNOW_CORE * sc); c.fill(); }
   c.font = '12px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.globalAlpha = 0.55;
   for (let i = 0; i < BIOMES.length; i++) { const q = polar(i, 4800, -0.42); c.fillText(BIOMES[i].icon, mx + q.x * sc, my + q.y * sc); }
   c.globalAlpha = 1;
   const zc = ['rgba(90,50,90,0.12)', 'rgba(70,30,70,0.18)', 'rgba(50,20,50,0.26)'];
-  for (let i = 0; i < 3; i++) { c.fillStyle = zc[i]; circle(c, mx + CX * sc, my + CY * sc, ZONE_EDGE[i] * sc); c.fill(); }
+  if (!REAL.on) for (let i = 0; i < 3; i++) { c.fillStyle = zc[i]; circle(c, mx + CX * sc, my + CY * sc, ZONE_EDGE[i] * sc); c.fill(); }
+  else { c.strokeStyle = 'rgba(190,140,255,0.35)'; c.lineWidth = 1; for (let i = 0; i < 3; i++) { circle(c, mcx, mcy, ZONE_EDGE[i] * sc); c.stroke(); } }
   c.textAlign = 'center'; c.textBaseline = 'middle';
-  for (const g of gifts) if (!g.opened) { c.fillStyle = (GIFT_KINDS[g.kind] || GIFT_KINDS[g.rich ? 'rich' : 'normal']).box; c.fillRect(mx + g.x * sc - 1.5, my + g.y * sc - 1.5, 3, 3); }
+  if (REAL.on) c.globalAlpha = 0.55;
+  for (const g of gifts) if (!g.opened) { c.fillStyle = (GIFT_KINDS[g.kind] || GIFT_KINDS[g.rich ? 'rich' : 'normal']).box; if (REAL.on) c.fillRect(mx + g.x * sc - 1, my + g.y * sc - 1, 2, 2); else c.fillRect(mx + g.x * sc - 1.5, my + g.y * sc - 1.5, 3, 3); }
+  c.globalAlpha = 1;
   c.font = '14px sans-serif'; for (const q of SHOPS) c.fillText('🎪', mx + q.x * sc, my + q.y * sc);
   c.font = '12px sans-serif'; for (const d of GUARDIANS) if (!bossDefeated['core_' + d.id]) c.fillText('⚙', mx + d.cx * sc, my + d.cy * sc);
   for (const e of enemies) if (e.kind === 'elite' && !e.dead) { c.fillStyle = '#d9822b'; circle(c, mx + e.x * sc, my + e.y * sc, 2.5); c.fill(); }
@@ -7618,7 +7911,7 @@ function drawHUDInner() {
   for (const s2 of scrolls) if (!s2.taken) { c.font = 'bold 13px sans-serif'; c.fillStyle = '#6a3a8c'; c.fillText('✦', mx + s2.x * sc, my + s2.y * sc - 8); }
   for (const k of pickups) if (k.type === 'shard') c.fillText('⭐', mx + k.x * sc, my + k.y * sc - 12 + Math.sin(gtime * 5) * 2);
   c.font = '16px sans-serif'; c.fillText(treeLight > 0 ? '🌟' : '🎄', mx + CX * sc, my + CY * sc);
-  c.strokeStyle = 'rgba(59,36,22,0.5)'; c.lineWidth = 1; c.setLineDash([3, 3]);
+  c.strokeStyle = REAL.on ? 'rgba(255,240,210,0.75)' : 'rgba(59,36,22,0.5)'; c.lineWidth = 1; c.setLineDash([3, 3]);
   c.strokeRect(mx + cam.x * sc, my + cam.y * sc, VW * sc, VH * sc); c.setLineDash([]);
   for (const q of players) {
     c.fillStyle = q === local ? UI.cream : '#9bd18f'; c.strokeStyle = UI.dark; c.lineWidth = 1.8;
