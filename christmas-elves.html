@@ -2629,6 +2629,7 @@ function gatherLights() {
     else if (d.t === 'crystal') L.push([d.x, d.y - 20, 110, 0.6, '#9fe3ff']);
   }
   for (const q of SHOPS) if (inV(q.x, q.y, 320)) L.push([q.x, q.y - 30, 320, 1, '#ffd166']);
+  if (REAL.on) for (const b of buildRoads().braziers) if (inV(b.x, b.y, 250)) L.push([b.x, b.y - 50, 240, 0.95, '#ff9a3c']);
   for (const g of GUARDIANS) if (inV(g.cx, g.cy, 300)) L.push([g.cx, g.cy - 40, 240, 0.9, CORE_STYLE[g.id].c]);
   for (const e of enemies) if (!e.dead && e.kind === 'boss' && inV(e.x, e.y, 300)) L.push([e.x, e.y - (e.z || 0), e.r * 2.6, 0.7, null]);
   for (const b of atmo.bolts) L.push([b.x, b.y, 380 * (1 - b.t / 0.45), 1, null]);
@@ -6201,7 +6202,12 @@ addEventListener('orientationchange', () => setTimeout(() => { resize(); autoSto
 //  그리기 — 캐릭터
 // =====================================================================
 function drawElf(c, x, y, L, face, walk, moving, s = 1, alpha = 1) {
-  if (REAL.on && !fxLite) { drawRealElf(c, x, y, L, face, walk, moving, s, alpha); return; }
+  if (REAL.on && !fxLite) {                              // 검정 꼬마 엘프 + 흰 스티커 외곽선
+    if (alpha > 0.3) { c.save(); c.globalAlpha = alpha * 0.5; const g = c.createRadialGradient(x, y + 19 * s, 1, x, y + 19 * s, 15 * s); g.addColorStop(0, 'rgba(10,12,30,0.6)'); g.addColorStop(1, 'rgba(10,12,30,0)'); c.fillStyle = g; c.fillRect(x - 16 * s, y + 12 * s, 32 * s, 14 * s); c.restore(); }
+    const k = s * 1.28;
+    sticker(c, x, y, 24 * k, 42 * k, 21 * k, Math.max(1.6, 2.4 * Math.min(1.4, s)), alpha, (cc, X, Y) => drawCuteElf(cc, X, Y, L, face, walk, moving, s));
+    return;
+  }
   c.save();
   c.translate(x, y); c.scale(s * face, s); c.globalAlpha = alpha;
   const sw = moving ? Math.sin(walk * 14) : 0;
@@ -7305,6 +7311,18 @@ function groundPattern(b) {
     for (let i = 0; i < 900; i++) { g.strokeStyle = 'hsla(' + rr_(70, 100) + ',35%,' + rr_(25, 45) + '%,0.7)'; g.lineWidth = 1.2; const x = R() * S, y = R() * S, l = rr_(3, 7); around(x, y, 8, (X, Y) => { g.beginPath(); g.moveTo(X, Y); g.lineTo(X + rr_(-2, 2), Y - l); g.stroke(); }); }
     noise = 9;
   }
+  // 흩어진 자갈과 돌멩이 (그림자 + 빛)
+  const pc = b.id === 'volcano' ? [70, 58, 54] : b.id === 'desert' ? [190, 160, 112] : b.id === 'jungle' || b.id === 'swamp' ? [120, 116, 100] : [150, 156, 168];
+  for (let i = 0; i < 70; i++) {
+    const x = R() * S, y = R() * S, r = i < 10 ? rr_(6, 13) : rr_(1.5, 4.5), sq = rr_(0.55, 0.85);
+    around(x, y, r * 2, (X, Y) => {
+      g.fillStyle = 'rgba(20,15,10,0.3)'; g.beginPath(); g.ellipse(X + r * 0.35, Y + r * 0.45, r, r * sq, 0, 0, Math.PI * 2); g.fill();
+      const gr = g.createRadialGradient(X - r * 0.35, Y - r * 0.4, r * 0.1, X, Y, r);
+      gr.addColorStop(0, mixRGB(pc, LIGHT_RGB, 0.45)); gr.addColorStop(0.6, 'rgb(' + pc + ')'); gr.addColorStop(1, mixRGB(pc, SHADE_RGB, 0.45));
+      g.fillStyle = gr; g.beginPath(); g.ellipse(X, Y, r, r * sq, 0, 0, Math.PI * 2); g.fill();
+      if (b.id === 'snow' && r > 5) { g.fillStyle = 'rgba(250,252,255,0.9)'; g.beginPath(); g.ellipse(X - r * 0.1, Y - r * 0.35, r * 0.75, r * sq * 0.45, 0, 0, Math.PI * 2); g.fill(); }
+    });
+  }
   // 아주 고운 입자 노이즈 (진짜 땅 같은 질감)
   const id = g.getImageData(0, 0, S, S), d = id.data;
   for (let i = 0; i < d.length; i += 4) { const n = (R() - 0.5) * noise * 2; d[i] += n; d[i + 1] += n; d[i + 2] += n; }
@@ -7828,6 +7846,193 @@ function drawRealElf(c, x, y, L, face, walk, moving, s, alpha) {
   return true;
 }
 
+// =====================================================================
+//  리얼 그래픽 3: 돌길 · 화로 기둥 · 자갈 · 그림 같은 명암 · 스티커 캐릭터
+// =====================================================================
+// ---------- 포석(돌을 깐) 길 질감 ----------
+let ROAD_TEX = null;
+function roadTex() {
+  if (ROAD_TEX) return ROAD_TEX;
+  const S = 256, cv = makeCanvas(S, S), g = cv.getContext('2d'), R = mulberry32(4242);
+  g.fillStyle = '#4a4036'; g.fillRect(0, 0, S, S);                  // 줄눈 (돌 사이 흙)
+  const stone = (x, y, w, h) => {
+    for (let dx = -S; dx <= S; dx += S) for (let dy = -S; dy <= S; dy += S) {
+      const X = x + dx, Y = y + dy;
+      if (X + w < 0 || Y + h < 0 || X > S || Y > S) continue;
+      const base = 120 + R() * 50 | 0, warm = R() * 14 | 0;
+      const gr = g.createLinearGradient(X, Y, X + w * 0.6, Y + h);
+      gr.addColorStop(0, 'rgb(' + (base + 40 + warm) + ',' + (base + 36) + ',' + (base + 30) + ')');
+      gr.addColorStop(0.5, 'rgb(' + (base + warm) + ',' + (base - 2) + ',' + (base - 8) + ')');
+      gr.addColorStop(1, 'rgb(' + (base - 45) + ',' + (base - 48) + ',' + (base - 50) + ')');
+      g.fillStyle = gr;
+      const r = Math.min(w, h) * (0.25 + R() * 0.2);
+      g.beginPath();
+      g.moveTo(X + r, Y + R() * 2); g.lineTo(X + w - r, Y + R() * 2); g.quadraticCurveTo(X + w, Y, X + w - R() * 2, Y + r);
+      g.lineTo(X + w - R() * 2, Y + h - r); g.quadraticCurveTo(X + w, Y + h, X + w - r, Y + h - R() * 2);
+      g.lineTo(X + r, Y + h - R() * 2); g.quadraticCurveTo(X, Y + h, X + R() * 2, Y + h - r);
+      g.lineTo(X + R() * 2, Y + r); g.quadraticCurveTo(X, Y, X + r, Y + R() * 2); g.fill();
+      g.strokeStyle = 'rgba(255,250,235,0.18)'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(X + r, Y + 2); g.lineTo(X + w - r, Y + 2); g.stroke();
+      if (R() < 0.35) { g.strokeStyle = 'rgba(30,24,20,0.5)'; g.lineWidth = 1; g.beginPath(); g.moveTo(X + w * R(), Y + h * 0.2); g.lineTo(X + w * R(), Y + h * 0.8); g.stroke(); }
+      if (R() < 0.4) { g.fillStyle = 'rgba(90,130,60,0.45)'; g.beginPath(); g.ellipse(X + w * R(), Y + h * (0.7 + R() * 0.3), w * 0.18, h * 0.12, 0, 0, Math.PI * 2); g.fill(); }
+    }
+  };
+  for (let row = 0, y = 0; row < 7; row++) {
+    const h = S / 7, off = (row % 2) * 18;
+    for (let x = -off; x < S; ) { const w = 30 + R() * 34; stone(x + 2, y + 2, Math.min(w, S - x) - 4, h - 4); x += w; }
+    y += h;
+  }
+  const id = g.getImageData(0, 0, S, S), d = id.data;
+  for (let i = 0; i < d.length; i += 4) { const n = (R() - 0.5) * 16; d[i] += n; d[i + 1] += n; d[i + 2] += n; }
+  g.putImageData(id, 0, 0);
+  return (ROAD_TEX = { cv, pat: null });
+}
+// 트리에서 각 지역 수호자와 코어 공장까지 이어지는 길 + 마을을 도는 순환로
+let ROADS = null;
+function buildRoads() {
+  if (ROADS) return ROADS;
+  const roads = [];
+  const wig = (x, y, i) => [x + Math.sin(i * 0.9) * 40, y + Math.cos(i * 0.7) * 40];
+  for (const d of GUARDIANS) {
+    const pts = [], n = 40, ex = d.cx, ey = d.cy;
+    for (let i = 0; i <= n; i++) {
+      const t = i / n, x = lerp(CX, ex, t), y = lerp(CY, ey, t), nx = -(ey - CY), ny = ex - CX, L = Math.hypot(nx, ny) || 1;
+      const bend = Math.sin(t * Math.PI * 2 + d.cx * 0.001) * 160 * Math.sin(t * Math.PI);
+      if (dist(x, y, CX, CY) < 620) continue;                         // 트리 광장 안쪽은 비워 둬요
+      pts.push([x + nx / L * bend, y + ny / L * bend]);
+    }
+    roads.push(pts);
+  }
+  const ring = [];
+  for (let i = 0; i <= 120; i++) { const a = i / 120 * Math.PI * 2, r = 1500 + Math.sin(a * 5) * 90; ring.push([CX + Math.cos(a) * r, CY + Math.sin(a) * r]); }
+  roads.push(ring);
+  const plaza = [];
+  for (let i = 0; i <= 80; i++) { const a = i / 80 * Math.PI * 2; plaza.push([CX + Math.cos(a) * 640, CY + 40 + Math.sin(a) * 560]); }
+  roads.push(plaza);
+  // 길가의 화로 기둥
+  const braziers = [];
+  for (const pts of roads.slice(0, -2)) for (let i = 4; i < pts.length; i += 7) {
+    const [x0, y0] = pts[i - 1], [x1, y1] = pts[i], dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy) || 1, s = i % 14 === 4 ? 1 : -1;
+    braziers.push({ x: x1 - dy / L * 120 * s, y: y1 + dx / L * 120 * s, ph: i * 1.3 });
+  }
+  for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2 + 0.2; braziers.push({ x: CX + Math.cos(a) * 760, y: CY + 40 + Math.sin(a) * 660, ph: i }); }
+  ROADS = { roads, braziers };
+  return ROADS;
+}
+function drawRoads(c, x0, y0, x1, y1) {
+  const R = buildRoads(), T = roadTex();
+  if (!T.pat) T.pat = c.createPattern(T.cv, 'repeat');
+  const vis = pts => pts.some(([x, y]) => x > x0 - 300 && x < x1 + 300 && y > y0 - 300 && y < y1 + 300);
+  c.save(); c.lineCap = c.lineJoin = 'round';
+  for (const pts of R.roads) {
+    if (!vis(pts)) continue;
+    c.beginPath(); pts.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y));
+    const W = pts.length > 60 ? 120 : 150;
+    c.strokeStyle = 'rgba(30,22,14,0.32)'; c.lineWidth = W + 34; c.stroke();        // 길 가장자리 흙 그늘
+    c.strokeStyle = 'rgba(60,46,30,0.55)'; c.lineWidth = W + 12; c.stroke();
+    c.strokeStyle = T.pat; c.lineWidth = W; c.stroke();
+    c.strokeStyle = 'rgba(255,245,220,0.07)'; c.lineWidth = W * 0.45; c.stroke();     // 가운데가 닳아서 반들반들
+  }
+  c.restore();
+}
+// 화로 기둥 (LoL 맵의 횃불처럼)
+function drawBrazier(c, b) {
+  const x = b.x, y = b.y, fl = Math.sin(gtime * 11 + b.ph) * 0.5 + Math.sin(gtime * 17 + b.ph * 2) * 0.5;
+  castShadow(c, x, y + 4, 90, 26, 0.3);
+  // 돌 받침
+  let g = c.createLinearGradient(x - 18, 0, x + 18, 0);
+  g.addColorStop(0, '#8e8a84'); g.addColorStop(0.45, '#6d6963'); g.addColorStop(1, '#3a3632');
+  c.fillStyle = g; c.beginPath(); c.moveTo(x - 20, y + 4); c.lineTo(x - 15, y - 34); c.lineTo(x + 15, y - 34); c.lineTo(x + 20, y + 4); c.closePath(); c.fill();
+  c.fillStyle = 'rgba(0,0,0,0.25)'; for (const yy of [-22, -10]) c.fillRect(x - 17, y + yy, 34, 2);
+  c.fillStyle = 'rgba(90,130,60,0.6)'; c.beginPath(); c.ellipse(x - 10, y, 9, 4, 0, 0, Math.PI * 2); c.fill();
+  // 쇠 그릇
+  g = c.createLinearGradient(0, y - 46, 0, y - 32); g.addColorStop(0, '#5a4636'); g.addColorStop(1, '#241a12');
+  c.fillStyle = g; c.beginPath(); c.moveTo(x - 24, y - 44); c.lineTo(x + 24, y - 44); c.lineTo(x + 16, y - 32); c.lineTo(x - 16, y - 32); c.closePath(); c.fill();
+  c.fillStyle = '#ffb347'; c.beginPath(); c.ellipse(x, y - 44, 22, 5, 0, 0, Math.PI * 2); c.fill();
+  // 불꽃
+  c.save(); c.globalCompositeOperation = 'lighter';
+  c.globalAlpha = 0.32 + fl * 0.1; c.drawImage(glowSprite('#ff7a1a'), x - 80, y - 125, 160, 160);
+  for (let i = 0; i < 7; i++) {
+    const t = ((gtime * 1.7 + i / 7 + b.ph) % 1), fx = x + Math.sin(i * 2.1 + gtime * 6) * (10 - t * 6), fy = y - 48 - t * 46, s = (1 - t) * 22 + 6;
+    c.globalAlpha = (1 - t) * 0.6; c.drawImage(glowSprite(t < 0.35 ? '#ffd27a' : '#ff6a10'), fx - s, fy - s, s * 2, s * 2);
+  }
+  c.restore();
+}
+// 땅 위에 넓게 칠한 그림 같은 명암 (밝은 곳 · 어두운 곳이 섞여서 깊이감)
+function drawTerrainShading() {
+  if (fxLow) return;
+  ctx.save(); ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  drawCloudLayer('shadow', 0.2, 10, 0, 1);
+  ctx.restore();
+}
+
+// ---------- 스티커 캐릭터: 흰 외곽선으로 배경에서 톡 튀어요 ----------
+const STK = { a: makeCanvas(8, 8), b: makeCanvas(8, 8) };
+function sticker(c, x, y, hw, top, bottom, outline, alpha, fn) {
+  const m = c.getTransform(), k = Math.min(3, Math.hypot(m.a, m.b) || 1);
+  const pad = outline + 2, W = Math.ceil((hw * 2 + pad * 2) * k), H = Math.ceil((top + bottom + pad * 2) * k);
+  if (W < 2 || H < 2 || W > 2000 || H > 2000) return fn(c, x, y);
+  const A = STK.a, B = STK.b;
+  if (A.width < W || A.height < H) { A.width = B.width = Math.max(A.width, W); A.height = B.height = Math.max(A.height, H); }
+  const a = A.getContext('2d'), b = B.getContext('2d');
+  a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, W + 2, H + 2);
+  a.setTransform(k, 0, 0, k, (hw + pad) * k, (top + pad) * k);
+  const ink = INK.on; INK.on = 0;
+  try { fn(a, 0, 0); } finally { INK.on = ink; }
+  b.setTransform(1, 0, 0, 1, 0, 0); b.clearRect(0, 0, W + 2, H + 2);
+  b.globalCompositeOperation = 'source-over'; b.drawImage(A, 0, 0, W, H, 0, 0, W, H);
+  b.globalCompositeOperation = 'source-in'; b.fillStyle = '#ffffff'; b.fillRect(0, 0, W, H);
+  b.globalCompositeOperation = 'source-over';
+  const lw = W / k, lh = H / k, ox = x - hw - pad, oy = y - top - pad;
+  c.save(); c.globalAlpha *= alpha;
+  for (let i = 0; i < 12; i++) { const an = i / 12 * Math.PI * 2; c.drawImage(B, 0, 0, W, H, ox + Math.cos(an) * outline, oy + Math.sin(an) * outline, lw, lh); }
+  c.drawImage(A, 0, 0, W, H, ox, oy, lw, lh);
+  c.restore();
+}
+// 심플한 검정 꼬마 엘프 (큰 하얀 눈 + 색깔 모자 · 목도리)
+function drawCuteElf(c, x, y, L, face, walk, moving, s) {
+  c.save(); c.translate(x, y); c.scale(s * face * 1.28, s * 1.28);
+  const sw = moving ? Math.sin(walk * 14) : 0, bob = moving ? Math.abs(sw) * -2.2 : Math.sin(gtime * 2) * 0.7;
+  const blink = (gtime * 0.7 + x * 0.003) % 3.6 < 0.12, squash = 1 + (moving ? Math.abs(sw) * 0.05 : Math.sin(gtime * 2) * 0.02);
+  const BLK = '#17151c';
+  // 발
+  c.fillStyle = BLK;
+  c.beginPath(); c.ellipse(-5, 16 + sw * 2, 4.6, 3.2, 0, 0, Math.PI * 2); c.fill();
+  c.beginPath(); c.ellipse(5, 16 - sw * 2, 4.6, 3.2, 0, 0, Math.PI * 2); c.fill();
+  c.translate(0, bob); c.scale(1 / squash, squash);
+  // 몸 + 머리 (하나로 이어진 동글동글한 콩 모양)
+  c.beginPath();
+  c.moveTo(-11, 14); c.quadraticCurveTo(-14, 2, -11, -6); c.quadraticCurveTo(-13, -22, 0, -23);
+  c.quadraticCurveTo(13, -22, 11, -6); c.quadraticCurveTo(14, 2, 11, 14); c.quadraticCurveTo(0, 17, -11, 14); c.closePath(); c.fill();
+  // 뾰족 귀
+  for (const sx of [-1, 1]) { c.beginPath(); c.moveTo(sx * 10, -14); c.quadraticCurveTo(sx * 18, -18, sx * 20, -21); c.quadraticCurveTo(sx * 15, -10, sx * 10.5, -8); c.closePath(); c.fill(); }
+  // 팔 (흔들흔들)
+  c.beginPath(); c.ellipse(12, 3 + sw, 3, 5.5, -0.5, 0, Math.PI * 2); c.fill();
+  c.beginPath(); c.ellipse(-12, 3 - sw, 3, 5.5, 0.5, 0, Math.PI * 2); c.fill();
+  // 은은한 윤기 (너무 납작하지 않게)
+  c.fillStyle = 'rgba(255,255,255,0.08)'; c.beginPath(); c.ellipse(-4, -15, 6, 4, -0.4, 0, Math.PI * 2); c.fill();
+  // 목도리 (캐릭터 색)
+  c.fillStyle = L.coat; rr(c, -11.5, -4, 23, 5.2, 2.6); c.fill();
+  c.beginPath(); c.moveTo(-8, 0); c.lineTo(-10, 9); c.lineTo(-5.5, 9); c.lineTo(-4.5, 0.5); c.closePath(); c.fill();
+  c.fillStyle = 'rgba(255,255,255,0.35)'; c.fillRect(-9.5, 6.5, 4, 1.2);
+  // 큰 하얀 눈
+  for (const ex of [-1, 6.4]) {
+    if (blink) { c.strokeStyle = '#ffffff'; c.lineWidth = 1.6; c.lineCap = 'round'; c.beginPath(); c.arc(ex, -13, 2.4, 0.2, Math.PI - 0.2); c.stroke(); continue; }
+    c.fillStyle = '#ffffff'; c.beginPath(); c.ellipse(ex, -13, 3.3, 4, 0, 0, Math.PI * 2); c.fill();
+    c.fillStyle = BLK; c.beginPath(); c.ellipse(ex + 0.9, -12.4, 1.8, 2.4, 0, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#ffffff'; c.beginPath(); c.arc(ex + 0.2, -13.6, 0.8, 0, Math.PI * 2); c.fill();
+  }
+  // 볼 + 입
+  c.fillStyle = 'rgba(255,110,140,0.75)'; c.beginPath(); c.ellipse(-3.6, -7.6, 2, 1.1, 0, 0, Math.PI * 2); c.fill(); c.beginPath(); c.ellipse(9.4, -7.6, 2, 1.1, 0, 0, Math.PI * 2); c.fill();
+  c.strokeStyle = '#ffffff'; c.lineWidth = 1.1; c.lineCap = 'round'; c.beginPath(); c.arc(2.8, -8.4, 1.5, 0.3, Math.PI - 0.3); c.stroke();
+  // 모자 (캐릭터 색 + 하얀 털 + 방울)
+  const tip = Math.sin(gtime * 2 + x * 0.01) * 1.5 + (moving ? sw * 1.6 : 0);
+  c.fillStyle = L.hat; c.beginPath(); c.moveTo(-11, -18); c.quadraticCurveTo(-5, -33, -18 + tip, -37); c.quadraticCurveTo(2, -33, 11, -18); c.closePath(); c.fill();
+  c.fillStyle = '#ffffff'; rr(c, -12, -21, 24, 5, 2.5); c.fill();
+  c.beginPath(); c.arc(-18 + tip, -37, 3.8, 0, Math.PI * 2); c.fill();
+  if (L.acc && L.acc !== 'glasses' && L.acc !== 'scarf') drawElfAcc(c, L.acc);
+  c.restore();
+}
+
 function drawWorld() {
   const c = ctx;
   const shk = shake * DIFF.fx, sx = shk ? rand(-shk, shk) : 0, sy = shk ? rand(-shk, shk) : 0;
@@ -7865,13 +8070,14 @@ function drawWorld() {
     if (REAL.on) { c.save(); c.clip(); tileGround(c, BIOMES[bi], Math.max(gx0, ax - TS), Math.max(gy0, ay - TS), Math.min(gx1, bx + TS), Math.min(gy1, by + TS)); c.restore(); }
     else { c.fillStyle = BIOMES[bi].ground; c.fill(); }
   }
+  if (REAL.on) drawRoads(c, x0, y0, x1, y1);
   for (const d of drifts) {
     if (d.x < x0 - 100 || d.x > x1 + 100 || d.y < y0 || d.y > y1) continue;
     if (REAL.on) { c.drawImage(driftSprite(d.c), d.x - d.rx * 1.15, d.y - d.ry * 1.6, d.rx * 2.3, d.ry * 3.2); continue; }
     c.fillStyle = d.c;
     c.beginPath(); c.ellipse(d.x, d.y, d.rx, d.ry, 0, 0, Math.PI * 2); c.fill();
   }
-  if (REAL.on) drawGroundGlints(c, Math.max(0, x0), Math.max(0, y0), Math.min(W, x1), Math.min(H, y1));
+  if (REAL.on) { drawTerrainShading(); drawGroundGlints(c, Math.max(0, x0), Math.max(0, y0), Math.min(W, x1), Math.min(H, y1)); }
   // 구역 경계
   c.lineWidth = REAL.on ? 2 : 3;
   for (let i = 0; i < 3; i++) {
@@ -7933,7 +8139,10 @@ function drawWorld() {
   for (const a of allies) if (inView(a.x, a.y)) list.push({ y: a.y, f: () => drawAlly(a) });
   for (const sl of sleighs) list.push({ y: sl.y + 400, f: () => drawSleigh(sl) });
   for (const q of SHOPS) if (inView(q.x, q.y, 320)) list.push({ y: q.y + 40, f: () => drawShopBuilding(q) });
-  for (const q of players) if (q.pet && PET[q.pet] && !q.dead && !q.inShop && q.petX !== undefined && inView(q.petX, q.petY)) list.push({ y: q.petY, f: () => drawPetInk(ctx, PET[q.pet], q.petX, q.petY + q.petBob, 1.15 * (1 + (q.petAtkT > 0 ? 0.2 * Math.sin(q.petAtkT / 0.22 * Math.PI) : 0)), gtime, q.petFace || 1) });
+  for (const q of players) if (q.pet && PET[q.pet] && !q.dead && !q.inShop && q.petX !== undefined && inView(q.petX, q.petY)) list.push({ y: q.petY, f: () => { const ps = 1.15 * (1 + (q.petAtkT > 0 ? 0.2 * Math.sin(q.petAtkT / 0.22 * Math.PI) : 0));
+    if (REAL.on && !fxLite) sticker(ctx, q.petX, q.petY + q.petBob, 30 * ps, 34 * ps, 18 * ps, 2.2, 1, (cc, X, Y) => drawPet(cc, PET[q.pet], X, Y, ps, gtime, q.petFace || 1));
+    else drawPetInk(ctx, PET[q.pet], q.petX, q.petY + q.petBob, ps, gtime, q.petFace || 1); } });
+  if (REAL.on) for (const b of buildRoads().braziers) if (inView(b.x, b.y, 200)) list.push({ y: b.y, f: () => drawBrazier(c, b) });
   if (inView(CX, CY, 900)) list.push({ y: CY + 60, f: drawTree });
   for (const t of turrets) if (inView(t.x, t.y)) list.push({ y: t.y, f: () => drawTurret(t) });
   for (const e of enemies) if (!e.dead && inView(e.x, e.y, 200)) list.push({ y: e.y + (e.kind === 'core' ? 30 : 0), f: () => e.kind === 'boss' ? (e.rage && drawRage(e), drawBoss(e)) : e.kind === 'core' ? (drawGuardLinks(e), drawCore(e), drawCoreUI(e)) : drawSlime(e) });
